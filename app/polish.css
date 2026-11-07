@@ -70,4 +70,6 @@ button:not(:disabled){transition:transform .22s cubic-bezier(.22,1,.36,1),backgr
 .entry-changes{font-size:11px;line-height:1.55;color:#607763;margin:0}
 .entry-note{display:flex;gap:8px;align-items:flex-start;margin:10px 0 0;padding:10px 11px;border-radius:12px;background:#edf4e9;color:#4c6753;font-size:12px;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere}
 .entry-note svg{flex:none;margin-top:1px}
+.load-older{display:block;width:100%;margin:15px 0 8px;padding:13px;border:1px solid #a7bba5;border-radius:14px;background:#edf4e9;color:#426e50;font-size:12px;font-weight:800}
+.load-older:hover{background:#e1eddd}
 @media(max-width:360px){.entry-filters{display:block}.entry-filters label+label{display:block;margin-top:9px}.entry-card-top{display:block}.entry-card time{display:block;text-align:left;margin-top:5px}}

@@ -42,7 +42,7 @@ export function EntryCard({ entry, teamName }: { entry: CountEntry; teamName: st
   </article>;
 }
 
-export function EntriesPage({ admin, entries, teams }: { admin: boolean; entries: CountEntry[]; teams: TeamName[] }) {
+export function EntriesPage({ admin, entries, teams, hasOlder, loadingOlder, loadOlder }: { admin: boolean; entries: CountEntry[]; teams: TeamName[]; hasOlder: boolean; loadingOlder: boolean; loadOlder: () => void }) {
   const [teamFilter, setTeamFilter] = useState("");
   const [collegeFilter, setCollegeFilter] = useState("");
   const scoped = entries.filter(entry => !teamFilter || entry.team_id === teamFilter);
@@ -58,6 +58,6 @@ export function EntriesPage({ admin, entries, teams }: { admin: boolean; entries
       <label>College<select value={collegeFilter} onChange={event => setCollegeFilter(event.target.value)}><option value="">All colleges</option>{collegeNames.map(name => <option key={name} value={name}>{name}</option>)}</select></label>
     </div>
     {visible.length ? <div className="entry-list">{visible.map(entry => <EntryCard key={entry.id} entry={entry} teamName={teams.find(team => team.id === entry.team_id)?.name ?? "Team"} />)}</div> : <div className="empty-card">{entries.length ? "No entries match these filters." : "No saved entries yet. New updates and notes will appear here."}</div>}
-    {entries.length === 300 && <p className="hint">Showing the latest 300 saved entries.</p>}
+    {hasOlder && <button className="load-older" type="button" disabled={loadingOlder} onClick={loadOlder}>{loadingOlder ? "Loading older entries…" : "Load older entries"}</button>}
   </section>;
 }

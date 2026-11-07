@@ -14,6 +14,8 @@ type College = { id: string; name: string; team_id: string | null };
 type Team = { id: string; name: string; leader: string; leaderId: string | null; username: string; members: string[]; target: number; colleges: College[]; counts: Counts; updated: string | null };
 type LeaderCredentials = { teamName: string; username: string; password: string; kind: "created" | "reset" };
 type Screen = "login" | "admin" | "leader" | "teams" | "team-form" | "colleges" | "entries" | "profile";
+const entryColumns = "id,team_id,college_id,college_name,note,interested,registered_unpaid,confirmed_paid,previous_interested,previous_registered_unpaid,previous_confirmed_paid,created_at";
+const entryPageSize = 50;
 const empty = (): Counts => ({ interested: 0, registered: 0, confirmed: 0 });
 const percent = (t: Team) => t.target ? t.counts.confirmed / t.target * 100 : 0;
 const pct = (n: number) => `${Math.min(100, Math.round(n || 0))}%`;
@@ -38,6 +40,7 @@ function PasswordField({ label, value, onChange, placeholder, autoComplete, requ
 export default function NexusApp() {
   const [session, setSession] = useState<Session | null>(null), [ready, setReady] = useState(false);
   const [profile, setProfile] = useState<Profile | null>(null), [teams, setTeams] = useState<Team[]>([]), [colleges, setColleges] = useState<College[]>([]), [entries, setEntries] = useState<CountEntry[]>([]);
+  const [hasOlderEntries, setHasOlderEntries] = useState(false), [loadingOlderEntries, setLoadingOlderEntries] = useState(false);
   const [screen, setScreen] = useState<Screen>("login"), [selected, setSelected] = useState<string | null>(null), [editing, setEditing] = useState<string | null>(null);
   const [sheet, setSheet] = useState(false), [draft, setDraft] = useState<Counts>(empty()), [baseCounts, setBaseCounts] = useState<Counts>(empty()), [entryCollegeId, setEntryCollegeId] = useState(""), [entryNote, setEntryNote] = useState(""), [entryError, setEntryError] = useState(""), [busy, setBusy] = useState(false), [error, setError] = useState(""), [notice, setNotice] = useState("");
   const [credentials, setCredentials] = useState<LeaderCredentials | null>(null);
@@ -52,7 +55,7 @@ export default function NexusApp() {
         supabase.from("teams").select("id,name,leader_name,leader_user_id,member_names,target").is("archived_at", null).order("created_at"),
         supabase.from("colleges").select("id,name,team_id").order("name"),
         supabase.from("team_counts").select("team_id,interested,registered_unpaid,confirmed_paid,updated_at"),
-        supabase.from("count_entries").select("id,team_id,college_id,college_name,note,interested,registered_unpaid,confirmed_paid,previous_interested,previous_registered_unpaid,previous_confirmed_paid,created_at").order("created_at", { ascending: false }).limit(300),
+        supabase.from("count_entries").select(entryColumns).order("created_at", { ascending: false }).order("id", { ascending: false }).limit(entryPageSize),
       ]);
       for (const r of [p, t, c, n, e]) if (r.error) throw r.error;
       const profiles = (p.data ?? []) as Profile[];
@@ -64,7 +67,7 @@ export default function NexusApp() {
         const count = ns.find(x => x.team_id === row.id);
         return { id: row.id, name: row.name, leader: row.leader_name, leaderId: row.leader_user_id, username: profiles.find(x => x.user_id === row.leader_user_id)?.username ?? "", members: row.member_names ?? [], target: row.target, colleges: cs.filter(x => x.team_id === row.id), counts: count ? { interested: count.interested, registered: count.registered_unpaid, confirmed: count.confirmed_paid } : empty(), updated: count?.updated_at ?? null } as Team;
       });
-      setProfile(mine); setTeams(mapped); setColleges(cs); setEntries((e.data ?? []) as CountEntry[]); setError(""); setScreen(x => x === "login" ? mine.role : x);
+      setProfile(mine); setTeams(mapped); setColleges(cs); setEntries((e.data ?? []) as CountEntry[]); setHasOlderEntries((e.data ?? []).length === entryPageSize); setError(""); setScreen(x => x === "login" ? mine.role : x);
     } catch (e) { setError(errText(e)); }
     finally { if (!quiet) setBusy(false); }
   }, []);
@@ -74,7 +77,7 @@ export default function NexusApp() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, current) => {
       if (event === "PASSWORD_RECOVERY") setNeedsPassword(true);
       setSession(current); setReady(true);
-      if (!current) { setProfile(null); setTeams([]); setColleges([]); setEntries([]); setCredentials(null); setScreen("login"); }
+      if (!current) { setProfile(null); setTeams([]); setColleges([]); setEntries([]); setHasOlderEntries(false); setCredentials(null); setScreen("login"); }
     });
     return () => { live = false; subscription.unsubscribe(); };
   }, []);
@@ -102,6 +105,17 @@ export default function NexusApp() {
     setSheet(false); flash("Entry saved"); if (session) void reload(session.user.id, true);
   };
   const openUpdate = () => { if (team && role === "leader") { setDraft({ ...team.counts }); setBaseCounts({ ...team.counts }); setEntryCollegeId(""); setEntryNote(""); setEntryError(""); setSheet(true); } };
+  const loadOlderEntries = async () => {
+    const oldest = entries.at(-1);
+    if (!oldest || !hasOlderEntries || loadingOlderEntries) return;
+    setLoadingOlderEntries(true);
+    const r = await supabase.from("count_entries").select(entryColumns).lt("created_at", oldest.created_at).order("created_at", { ascending: false }).order("id", { ascending: false }).limit(entryPageSize);
+    setLoadingOlderEntries(false);
+    if (r.error) { setError(r.error.message); return; }
+    const older = (r.data ?? []) as CountEntry[];
+    setEntries(current => [...current, ...older.filter(entry => !current.some(saved => saved.id === entry.id))]);
+    setHasOlderEntries(older.length === entryPageSize);
+  };
 
   if (!ready || (session && !profile && !error)) return <main className="login-page"><section className="login-card"><div className="login-plant"><Plant percent={65} /></div><h1>NEXUS</h1><p className="sub">Loading your plant…</p></section></main>;
   if (!session) return <Login error={error} onError={setError} />;
@@ -114,7 +128,7 @@ export default function NexusApp() {
     {screen === "teams" && <TeamsPage teams={teams} create={() => { setEditing(null); setScreen("team-form"); }} edit={id => { setEditing(id); setScreen("team-form"); }} />}
     {screen === "team-form" && <TeamWizard key={editing ?? "new"} team={teams.find(t => t.id === editing)} colleges={colleges} back={() => setScreen("teams")} saved={async (id, login) => { setSelected(id); if (session) await reload(session.user.id); setScreen("teams"); if (login) setCredentials(login); else flash(editing ? "Team updated" : "Team created"); }} deleted={async () => { setSelected(null); setEditing(null); if (session) await reload(session.user.id); setScreen("teams"); flash("Team deleted"); }} />}
     {screen === "colleges" && <CollegesPage admin={role === "admin"} team={team} teams={teams} colleges={colleges} back={home} refresh={() => session ? reload(session.user.id, true) : Promise.resolve()} />}
-    {screen === "entries" && <EntriesPage admin={role === "admin"} entries={entries} teams={teams} />}
+    {screen === "entries" && <EntriesPage admin={role === "admin"} entries={entries} teams={teams} hasOlder={hasOlderEntries} loadingOlder={loadingOlderEntries} loadOlder={() => void loadOlderEntries()} />}
     {screen === "profile" && <ProfilePage profile={profile} team={team} logout={() => void supabase.auth.signOut()} />}
     <nav className="bottom-nav"><button className={screen === "admin" || screen === "leader" ? "active" : ""} onClick={home}><Home size={20} /><span>Home</span></button>{role === "admin" ? <><button className={screen === "teams" || screen === "team-form" ? "active" : ""} onClick={() => setScreen("teams")}><Users size={20} /><span>Teams</span></button><button className={screen === "colleges" ? "active" : ""} onClick={() => setScreen("colleges")}><Building2 size={20} /><span>Colleges</span></button></> : <button onClick={openUpdate}><Edit3 size={20} /><span>Update</span></button>}<button className={screen === "entries" ? "active" : ""} onClick={() => setScreen("entries")}><FileText size={20} /><span>Entries</span></button><button className={screen === "profile" ? "active" : ""} onClick={() => setScreen("profile")}><UserRound size={20} /><span>Profile</span></button></nav>
     {sheet && team && <UpdateSheet team={team} draft={draft} setDraft={setDraft} collegeId={entryCollegeId} setCollegeId={setEntryCollegeId} note={entryNote} setNote={setEntryNote} error={entryError} close={() => { if (!busy) setSheet(false); }} save={() => void saveCounts()} busy={busy} />}
