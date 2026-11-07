@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import "./polish.css";
+import "./refinement.css";
+import "./detail-refinement.css";
+import "./plant-refinement.css";
 
 export const metadata: Metadata = {
   title: "NEXUS Progress Tracker",
