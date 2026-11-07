@@ -102,3 +102,47 @@ button:not(:disabled){transition:transform .22s cubic-bezier(.22,1,.36,1),backgr
 .team-detail-empty{font-size:12px;color:#859587;margin:15px 0 3px}
 .team-detail-updated{font-size:11px;line-height:1.5;color:#87988a;text-align:center;margin:18px 0}
 .team-detail-edit{margin-top:10px}
+.plant-art,.plant-stem,.plant-leaf,.plant-flower{animation:none}
+.plant-stem{stroke-dashoffset:0}
+.plant-growth-body{transform-box:view-box;transform-origin:50% 82%}
+.plant-touch{display:block;width:260px;max-width:100%;margin:0 auto;padding:0;border:0;border-radius:24px;background:transparent;cursor:pointer}
+.plant-touch .plant{width:100%;height:220px}
+.plant-touch .plant{transition:transform .3s cubic-bezier(.22,1,.36,1)}
+.plant-touch:hover .plant{transform:scale(1.035)}
+.plant-touch:active .plant{transform:scale(.98)}
+.plant-touch:focus-visible{outline:3px solid #8ead8a;outline-offset:2px}
+.plant-tap-hint{text-align:center;font-size:10px;letter-spacing:.02em;color:#7f9a81;margin:6px 0 0}
+.growth-encourage{animation:growth-caption .55s cubic-bezier(.22,1,.36,1) both}
+.plant-growing .plant-growth-body{animation:plant-lift 2.4s cubic-bezier(.22,1,.36,1) both}
+.plant-growing .plant-stem{stroke-dasharray:100;animation:stem-grow-from 1.25s .12s cubic-bezier(.18,.75,.28,1) both}
+.plant-growing .plant-leaf{animation:leaf-flutter 1.4s cubic-bezier(.22,1,.36,1) both}
+.plant-growing .plant-leaf-new{animation:leaf-unfurl 1.1s cubic-bezier(.2,1.2,.35,1) both}
+.plant-leaf,.plant-petal{transform-box:fill-box;transform-origin:center bottom}
+.plant-growing .plant-flower-new{transform-box:fill-box;transform-origin:center bottom;animation:flower-rise 1s .65s cubic-bezier(.2,1.2,.35,1) both}
+.plant-growing .plant-petal{animation:petal-unfurl .95s cubic-bezier(.2,1.25,.35,1) both}
+.plant-growing .plant-flower-center{transform-box:fill-box;transform-origin:center;animation:flower-center-pop .7s 1.25s cubic-bezier(.2,1.3,.35,1) both}
+.plant-growing .plant-halo{transform-box:fill-box;transform-origin:center;animation:halo-warm 2.4s ease-out both}
+.plant-growing .plant-soil{transform-box:fill-box;transform-origin:center;animation:soil-settle .7s .15s ease-out both}
+.plant-nudging .plant-growth-body{animation:plant-nudge .9s cubic-bezier(.22,1,.36,1) both}
+.plant-nudging .plant-leaf{animation:leaf-flutter .75s ease-in-out both}
+.growth-dew,.growth-sparkles{position:absolute;inset:0;pointer-events:none}
+.growth-dew i{position:absolute;top:5%;width:7px;height:10px;border-radius:70% 70% 70% 0;background:#f9e8c6;box-shadow:0 1px 6px #fff8e9;opacity:0;animation:dew-fall 1.25s ease-in both}
+.growth-dew i:nth-child(1){left:31%;animation-delay:.12s}.growth-dew i:nth-child(2){left:61%;animation-delay:.3s}.growth-dew i:nth-child(3){left:74%;animation-delay:.5s}
+.growth-sparkles i{position:absolute;font-style:normal;font-size:15px;line-height:1;color:#efbd91;opacity:0;animation:sparkle-pop 1.6s ease-out both}
+.growth-sparkles i:nth-child(1){top:21%;left:15%;animation-delay:.2s}.growth-sparkles i:nth-child(2){top:8%;left:72%;animation-delay:.6s;color:#e7aa93}.growth-sparkles i:nth-child(3){top:48%;left:85%;animation-delay:.9s}.growth-sparkles i:nth-child(4){top:58%;left:16%;animation-delay:1.25s;color:#e7aa93}.growth-sparkles i:nth-child(5){top:4%;left:43%;animation-delay:1.5s}
+.plant-nudging .growth-sparkles i{animation-duration:.85s;animation-delay:0s}.plant-nudging .growth-sparkles i:nth-child(2){animation-delay:.1s}.plant-nudging .growth-sparkles i:nth-child(3){animation-delay:.2s}.plant-nudging .growth-sparkles i:nth-child(n+4){display:none}
+.plant-growing .falling-petals i{animation:petal-drift 1.7s ease-out both}
+.plant-growing .falling-petals i:nth-child(1){animation-delay:.3s}.plant-growing .falling-petals i:nth-child(2){animation-delay:.6s}.plant-growing .falling-petals i:nth-child(3){animation-delay:.9s}.plant-growing .falling-petals i:nth-child(4){animation-delay:1.2s}.plant-growing .falling-petals i:nth-child(5){animation-delay:1.5s}
+@keyframes stem-grow-from{from{stroke-dashoffset:var(--stem-start)}to{stroke-dashoffset:0}}
+@keyframes plant-lift{0%{transform:translateY(3px) rotate(-2deg)}25%{transform:translateY(-3px) rotate(2deg)}54%{transform:translateY(-5px) rotate(-1.5deg)}78%{transform:translateY(-2px) rotate(.7deg)}100%{transform:none}}
+@keyframes plant-nudge{0%,100%{transform:none}25%{transform:rotate(4deg)}58%{transform:rotate(-3deg)}82%{transform:rotate(1deg)}}
+@keyframes leaf-flutter{0%,100%{transform:none}42%{transform:rotate(7deg) scale(1.06)}70%{transform:rotate(-3deg)}}
+@keyframes leaf-unfurl{0%{opacity:0;transform:scale(.15) rotate(-20deg)}55%{opacity:1}82%{transform:scale(1.08) rotate(3deg)}100%{opacity:1;transform:none}}
+@keyframes flower-rise{0%{opacity:0;transform:translateY(11px) scale(.35)}75%{opacity:1;transform:translateY(-2px) scale(1.08)}100%{opacity:1;transform:none}}
+@keyframes petal-unfurl{0%{opacity:0;transform:scale(.12) rotate(-13deg)}70%{opacity:1;transform:scale(1.1) rotate(2deg)}100%{opacity:1;transform:none}}
+@keyframes flower-center-pop{0%{opacity:0;transform:scale(.2)}70%{opacity:1;transform:scale(1.16)}100%{opacity:1;transform:none}}
+@keyframes halo-warm{0%{opacity:.55;transform:scale(.9)}48%{opacity:1;transform:scale(1.09)}100%{opacity:1;transform:none}}
+@keyframes soil-settle{0%,100%{transform:none}45%{transform:scaleX(1.05) scaleY(.94)}}
+@keyframes dew-fall{0%{opacity:0;transform:translateY(-8px) rotate(-45deg) scale(.6)}20%{opacity:.9}80%{opacity:.8}100%{opacity:0;transform:translateY(92px) rotate(-45deg) scale(.5)}}
+@keyframes sparkle-pop{0%{opacity:0;transform:scale(.2) rotate(-20deg)}35%{opacity:1;transform:scale(1.2) rotate(8deg)}100%{opacity:0;transform:scale(.4) rotate(35deg) translateY(-12px)}}
+@keyframes growth-caption{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
