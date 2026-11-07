@@ -5,6 +5,7 @@ import Image from "next/image";
 import { FunctionsHttpError, type Session } from "@supabase/supabase-js";
 import { ArrowLeft, Building2, ChevronRight, Edit3, Eye, EyeOff, FileText, Home, LogOut, Plus, Search, Settings2, Trash2, UserRound, Users } from "lucide-react";
 import { Plant, stage } from "@/components/Plant";
+import { CollegeBreakdown, type CollegeTotal } from "@/components/CollegeBreakdown";
 import { EntryCard, EntriesPage, type CountEntry } from "@/components/EntryHistory";
 import { TeamDetail } from "@/components/TeamDetail";
 import { UpdateSheet, type Counts } from "@/components/UpdateEntriesSheet";
@@ -12,12 +13,14 @@ import { authLinkType, supabase } from "@/lib/supabase";
 
 type Profile = { user_id: string; username: string; display_name: string; role: "admin" | "leader" };
 type College = { id: string; name: string; team_id: string | null };
-type Team = { id: string; name: string; leader: string; leaderId: string | null; username: string; members: string[]; target: number; colleges: College[]; counts: Counts; updated: string | null };
+type CollegeCountRow = { team_id: string; college_id: string; interested: number; registered_unpaid: number; confirmed_paid: number };
+type Team = { id: string; name: string; leader: string; leaderId: string | null; username: string; members: string[]; target: number; colleges: College[]; collegeTotals: CollegeTotal[]; unallocated: Counts; counts: Counts; updated: string | null };
 type LeaderCredentials = { teamName: string; username: string; password: string; kind: "created" | "reset" };
 type Screen = "login" | "admin" | "leader" | "teams" | "team-detail" | "team-form" | "colleges" | "entries" | "profile";
 type PlantMotion = { kind: "grow" | "nudge"; fromPercent: number; id: number };
 type PlantMessage = { text: string; id: number };
-const entryColumns = "id,team_id,college_id,college_name,note,interested,registered_unpaid,confirmed_paid,previous_interested,previous_registered_unpaid,previous_confirmed_paid,created_at";
+type EntryMode = "update" | "allocation";
+const entryColumns = "id,team_id,college_id,college_name,note,entry_kind,interested,registered_unpaid,confirmed_paid,previous_interested,previous_registered_unpaid,previous_confirmed_paid,college_interested,college_registered_unpaid,college_confirmed_paid,previous_college_interested,previous_college_registered_unpaid,previous_college_confirmed_paid,created_at";
 const entryPageSize = 50;
 const empty = (): Counts => ({ interested: 0, registered: 0, confirmed: 0 });
 function savedEntryMessage(confirmed: number, target: number, increased: boolean) {
@@ -53,7 +56,7 @@ export default function NexusApp() {
   const [profile, setProfile] = useState<Profile | null>(null), [teams, setTeams] = useState<Team[]>([]), [colleges, setColleges] = useState<College[]>([]), [entries, setEntries] = useState<CountEntry[]>([]);
   const [hasOlderEntries, setHasOlderEntries] = useState(false), [loadingOlderEntries, setLoadingOlderEntries] = useState(false);
   const [screen, setScreen] = useState<Screen>("login"), [selected, setSelected] = useState<string | null>(null), [editing, setEditing] = useState<string | null>(null);
-  const [sheet, setSheet] = useState(false), [draft, setDraft] = useState<Counts>(empty()), [baseCounts, setBaseCounts] = useState<Counts>(empty()), [entryCollegeId, setEntryCollegeId] = useState(""), [entryNote, setEntryNote] = useState(""), [entryError, setEntryError] = useState(""), [busy, setBusy] = useState(false), [error, setError] = useState(""), [notice, setNotice] = useState("");
+  const [sheet, setSheet] = useState(false), [entryMode, setEntryMode] = useState<EntryMode>("update"), [draft, setDraft] = useState<Counts>(empty()), [baseCounts, setBaseCounts] = useState<Counts>(empty()), [entryCollegeId, setEntryCollegeId] = useState(""), [entryNote, setEntryNote] = useState(""), [entryError, setEntryError] = useState(""), [busy, setBusy] = useState(false), [error, setError] = useState(""), [notice, setNotice] = useState("");
   const [plantMotion, setPlantMotion] = useState<PlantMotion | null>(null);
   const [plantMessage, setPlantMessage] = useState<PlantMessage | null>(null);
   const [credentials, setCredentials] = useState<LeaderCredentials | null>(null);
@@ -63,22 +66,36 @@ export default function NexusApp() {
   const reload = useCallback(async (userId: string, quiet = false) => {
     if (!quiet) setBusy(true);
     try {
-      const [p, t, c, n, e] = await Promise.all([
+      const [p, t, c, n, e, cc] = await Promise.all([
         supabase.from("profiles").select("user_id,username,display_name,role"),
         supabase.from("teams").select("id,name,leader_name,leader_user_id,member_names,target").is("archived_at", null).order("created_at"),
         supabase.from("colleges").select("id,name,team_id").order("name"),
         supabase.from("team_counts").select("team_id,interested,registered_unpaid,confirmed_paid,updated_at"),
         supabase.from("count_entries").select(entryColumns).order("created_at", { ascending: false }).order("id", { ascending: false }).limit(entryPageSize),
+        supabase.from("college_counts").select("team_id,college_id,interested,registered_unpaid,confirmed_paid"),
       ]);
-      for (const r of [p, t, c, n, e]) if (r.error) throw r.error;
+      for (const r of [p, t, c, n, e, cc]) if (r.error) throw r.error;
       const profiles = (p.data ?? []) as Profile[];
       const mine = profiles.find(x => x.user_id === userId);
       if (!mine) throw new Error("This account has no NEXUS role yet. Ask your administrator for access.");
       const cs = (c.data ?? []) as College[];
       const ns = (n.data ?? []) as { team_id: string; interested: number; registered_unpaid: number; confirmed_paid: number; updated_at: string }[];
+      const trackedCounts = (cc.data ?? []) as CollegeCountRow[];
       const mapped = ((t.data ?? []) as { id: string; name: string; leader_name: string; leader_user_id: string | null; member_names: string[]; target: number }[]).map(row => {
         const count = ns.find(x => x.team_id === row.id);
-        return { id: row.id, name: row.name, leader: row.leader_name, leaderId: row.leader_user_id, username: profiles.find(x => x.user_id === row.leader_user_id)?.username ?? "", members: row.member_names ?? [], target: row.target, colleges: cs.filter(x => x.team_id === row.id), counts: count ? { interested: count.interested, registered: count.registered_unpaid, confirmed: count.confirmed_paid } : empty(), updated: count?.updated_at ?? null } as Team;
+        const counts = count ? { interested: count.interested, registered: count.registered_unpaid, confirmed: count.confirmed_paid } : empty();
+        const assigned = cs.filter(x => x.team_id === row.id);
+        const recorded = trackedCounts.filter(x => x.team_id === row.id);
+        const collegeTotals: CollegeTotal[] = [
+          ...assigned.map(college => {
+            const saved = recorded.find(item => item.college_id === college.id);
+            return { id: college.id, name: college.name, assigned: true, counts: saved ? { interested: saved.interested, registered: saved.registered_unpaid, confirmed: saved.confirmed_paid } : empty() };
+          }),
+          ...recorded.filter(item => !assigned.some(college => college.id === item.college_id)).map(item => ({ id: item.college_id, name: cs.find(college => college.id === item.college_id)?.name ?? "Former college", assigned: false, counts: { interested: item.interested, registered: item.registered_unpaid, confirmed: item.confirmed_paid } })),
+        ];
+        const tracked = collegeTotals.reduce((sum, college) => ({ interested: sum.interested + college.counts.interested, registered: sum.registered + college.counts.registered, confirmed: sum.confirmed + college.counts.confirmed }), empty());
+        const unallocated = { interested: Math.max(0, counts.interested - tracked.interested), registered: Math.max(0, counts.registered - tracked.registered), confirmed: Math.max(0, counts.confirmed - tracked.confirmed) };
+        return { id: row.id, name: row.name, leader: row.leader_name, leaderId: row.leader_user_id, username: profiles.find(x => x.user_id === row.leader_user_id)?.username ?? "", members: row.member_names ?? [], target: row.target, colleges: assigned, collegeTotals, unallocated, counts, updated: count?.updated_at ?? null } as Team;
       });
       setProfile(mine); setTeams(mapped); setColleges(cs); setEntries((e.data ?? []) as CountEntry[]); setHasOlderEntries((e.data ?? []).length === entryPageSize); setError(""); setScreen(x => x === "login" ? mine.role : x);
     } catch (e) { setError(errText(e)); }
@@ -121,20 +138,29 @@ export default function NexusApp() {
   const saveCounts = async () => {
     if (!team || role !== "leader") return;
     if (!team.colleges.some(c => c.id === entryCollegeId)) { setEntryError("Choose one of your assigned colleges."); return; }
-    if (draft.interested === baseCounts.interested && draft.registered === baseCounts.registered && draft.confirmed === baseCounts.confirmed && !entryNote.trim()) { setEntryError("Change a count or add a note before saving."); return; }
     const previousPercent = percent(team);
     const nextCounts = { ...draft };
+    const delta = { interested: nextCounts.interested - baseCounts.interested, registered: nextCounts.registered - baseCounts.registered, confirmed: nextCounts.confirmed - baseCounts.confirmed };
+    if (entryMode === "allocation") {
+      if (Object.values(delta).some(value => value < 0) || Object.values(delta).every(value => value === 0)) { setEntryError("Add at least one earlier count to this college."); return; }
+      if (delta.interested > team.unallocated.interested || delta.registered > team.unallocated.registered || delta.confirmed > team.unallocated.confirmed) { setEntryError("The amounts exceed the earlier totals awaiting a college."); return; }
+    } else if (Object.values(delta).every(value => value === 0) && !entryNote.trim()) { setEntryError("Change a college count or add a note before saving."); return; }
+    const nextTeamCounts = entryMode === "allocation" ? team.counts : { interested: team.counts.interested + delta.interested, registered: team.counts.registered + delta.registered, confirmed: team.counts.confirmed + delta.confirmed };
     setBusy(true); setEntryError("");
-    const r = await supabase.from("count_entries").insert({ team_id: team.id, college_id: entryCollegeId, note: entryNote.trim(), interested: draft.interested, registered_unpaid: draft.registered, confirmed_paid: draft.confirmed, previous_interested: baseCounts.interested, previous_registered_unpaid: baseCounts.registered, previous_confirmed_paid: baseCounts.confirmed }).select("id").single();
+    const r = await supabase.from("count_entries").insert({ team_id: team.id, college_id: entryCollegeId, note: entryNote.trim(), entry_kind: entryMode, college_interested: nextCounts.interested, college_registered_unpaid: nextCounts.registered, college_confirmed_paid: nextCounts.confirmed, previous_college_interested: baseCounts.interested, previous_college_registered_unpaid: baseCounts.registered, previous_college_confirmed_paid: baseCounts.confirmed }).select("id").single();
     setBusy(false);
     if (r.error) { setEntryError(r.error.message); return; }
-    setTeams(current => current.map(item => item.id === team.id ? { ...item, counts: nextCounts, updated: new Date().toISOString() } : item));
+    setTeams(current => current.map(item => item.id === team.id ? { ...item, counts: nextTeamCounts, collegeTotals: item.collegeTotals.map(college => college.id === entryCollegeId ? { ...college, counts: nextCounts } : college), unallocated: entryMode === "allocation" ? { interested: item.unallocated.interested - delta.interested, registered: item.unallocated.registered - delta.registered, confirmed: item.unallocated.confirmed - delta.confirmed } : item.unallocated, updated: new Date().toISOString() } : item));
     setSheet(false); setScreen("leader");
-    setPlantMotion(current => ({ kind: nextCounts.confirmed > baseCounts.confirmed ? "grow" : "nudge", fromPercent: previousPercent, id: (current?.id ?? 0) + 1 }));
-    setPlantMessage(current => ({ text: savedEntryMessage(nextCounts.confirmed, team.target, nextCounts.confirmed > baseCounts.confirmed), id: (current?.id ?? 0) + 1 }));
-    flash("Entry saved"); if (session) void reload(session.user.id, true);
+    setPlantMotion(current => ({ kind: entryMode === "update" && delta.confirmed > 0 ? "grow" : "nudge", fromPercent: previousPercent, id: (current?.id ?? 0) + 1 }));
+    setPlantMessage(current => ({ text: entryMode === "allocation" ? "Earlier totals assigned to your college. Nicely done!" : savedEntryMessage(nextTeamCounts.confirmed, team.target, delta.confirmed > 0), id: (current?.id ?? 0) + 1 }));
+    flash(entryMode === "allocation" ? "Earlier totals assigned" : "Entry saved"); if (session) void reload(session.user.id, true);
   };
-  const openUpdate = () => { if (team && role === "leader") { setDraft({ ...team.counts }); setBaseCounts({ ...team.counts }); setEntryCollegeId(""); setEntryNote(""); setEntryError(""); setSheet(true); } };
+  const openUpdate = (mode: EntryMode = "update") => { if (team && role === "leader") { setEntryMode(mode); setDraft(empty()); setBaseCounts(empty()); setEntryCollegeId(""); setEntryNote(""); setEntryError(""); setSheet(true); } };
+  const chooseEntryCollege = (id: string) => {
+    const counts = team?.collegeTotals.find(college => college.id === id && college.assigned)?.counts ?? empty();
+    setEntryCollegeId(id); setBaseCounts({ ...counts }); setDraft({ ...counts }); setEntryError("");
+  };
   const tapPlant = () => { if (team && plantMotion?.kind !== "grow") setPlantMotion(current => ({ kind: "nudge", fromPercent: percent(team), id: (current?.id ?? 0) + 1 })); };
   const loadOlderEntries = async () => {
     const oldest = entries.at(-1);
@@ -155,15 +181,15 @@ export default function NexusApp() {
   return <main className="app-shell"><header className="topbar"><button className="brand" onClick={home}><b className="brand-emblem"><Image src="/nexus-team-emblem.png" alt="" width={31} height={31} /></b><span>NEXUS<small>PROGRESS TRACKER</small></span></button><button className="avatar" onClick={() => setScreen("profile")}>{profile.display_name.slice(0, 2).toUpperCase()}</button></header>
     {notice && <div className="toast">✓ {notice}</div>}{error && <div className="app-error" role="alert">{error}<button onClick={() => setError("")}>Dismiss</button></div>}{busy && <p className="loading-note">Updating your plant…</p>}
     {screen === "admin" && <AdminDashboard teams={teams} entries={entries} manage={() => setScreen("teams")} view={id => { setSelected(id); setScreen("team-detail"); }} history={() => setScreen("entries")} create={() => { setEditing(null); setScreen("team-form"); }} />}
-    {screen === "leader" && (team ? <LeaderDashboard team={team} name={profile.display_name} motion={plantMotion} message={plantMessage} tapPlant={tapPlant} update={openUpdate} colleges={() => setScreen("colleges")} history={() => setScreen("entries")} /> : <section className="page empty-state"><Plant percent={0} /><h1>Your team is being prepared.</h1><p>Ask your administrator to assign your account to a team.</p></section>)}
+    {screen === "leader" && (team ? <LeaderDashboard team={team} name={profile.display_name} motion={plantMotion} message={plantMessage} tapPlant={tapPlant} update={() => openUpdate()} allocate={() => openUpdate("allocation")} colleges={() => setScreen("colleges")} history={() => setScreen("entries")} /> : <section className="page empty-state"><Plant percent={0} /><h1>Your team is being prepared.</h1><p>Ask your administrator to assign your account to a team.</p></section>)}
     {screen === "teams" && <TeamsPage teams={teams} create={() => { setEditing(null); setScreen("team-form"); }} view={id => { setSelected(id); setScreen("team-detail"); }} />}
     {screen === "team-detail" && (selectedTeam ? <TeamDetail team={selectedTeam} back={() => setScreen("teams")} edit={() => { setEditing(selectedTeam.id); setScreen("team-form"); }} /> : <section className="page empty-state"><h1>Team unavailable</h1><p>This team may have been removed.</p><button className="primary" onClick={() => setScreen("teams")}>Back to teams</button></section>)}
     {screen === "team-form" && <TeamWizard key={editing ?? "new"} team={teams.find(t => t.id === editing)} colleges={colleges} back={() => setScreen(editing ? "team-detail" : "teams")} saved={async (id, login) => { setSelected(id); if (session) await reload(session.user.id); setScreen(editing ? "team-detail" : "teams"); if (login) setCredentials(login); else flash(editing ? "Team updated" : "Team created"); }} deleted={async () => { setSelected(null); setEditing(null); if (session) await reload(session.user.id); setScreen("teams"); flash("Team deleted"); }} />}
     {screen === "colleges" && <CollegesPage admin={role === "admin"} team={team} teams={teams} colleges={colleges} back={home} refresh={() => session ? reload(session.user.id, true) : Promise.resolve()} />}
     {screen === "entries" && <EntriesPage admin={role === "admin"} entries={entries} teams={teams} hasOlder={hasOlderEntries} loadingOlder={loadingOlderEntries} loadOlder={() => void loadOlderEntries()} />}
     {screen === "profile" && <ProfilePage profile={profile} team={team} logout={() => void supabase.auth.signOut()} />}
-    <nav className="bottom-nav"><button className={screen === "admin" || screen === "leader" ? "active" : ""} onClick={home}><Home size={20} /><span>Home</span></button>{role === "admin" ? <><button className={screen === "teams" || screen === "team-detail" || screen === "team-form" ? "active" : ""} onClick={() => setScreen("teams")}><Users size={20} /><span>Teams</span></button><button className={screen === "colleges" ? "active" : ""} onClick={() => setScreen("colleges")}><Building2 size={20} /><span>Colleges</span></button></> : <button onClick={openUpdate}><Edit3 size={20} /><span>Update</span></button>}<button className={screen === "entries" ? "active" : ""} onClick={() => setScreen("entries")}><FileText size={20} /><span>Entries</span></button><button className={screen === "profile" ? "active" : ""} onClick={() => setScreen("profile")}><UserRound size={20} /><span>Profile</span></button></nav>
-    {sheet && team && <UpdateSheet team={team} draft={draft} setDraft={setDraft} collegeId={entryCollegeId} setCollegeId={setEntryCollegeId} note={entryNote} setNote={setEntryNote} error={entryError} close={() => { if (!busy) setSheet(false); }} save={() => void saveCounts()} busy={busy} />}
+    <nav className="bottom-nav"><button className={screen === "admin" || screen === "leader" ? "active" : ""} onClick={home}><Home size={20} /><span>Home</span></button>{role === "admin" ? <><button className={screen === "teams" || screen === "team-detail" || screen === "team-form" ? "active" : ""} onClick={() => setScreen("teams")}><Users size={20} /><span>Teams</span></button><button className={screen === "colleges" ? "active" : ""} onClick={() => setScreen("colleges")}><Building2 size={20} /><span>Colleges</span></button></> : <button onClick={() => openUpdate()}><Edit3 size={20} /><span>Update</span></button>}<button className={screen === "entries" ? "active" : ""} onClick={() => setScreen("entries")}><FileText size={20} /><span>Entries</span></button><button className={screen === "profile" ? "active" : ""} onClick={() => setScreen("profile")}><UserRound size={20} /><span>Profile</span></button></nav>
+    {sheet && team && <UpdateSheet team={team} mode={entryMode} draft={draft} setDraft={setDraft} collegeId={entryCollegeId} setCollegeId={chooseEntryCollege} note={entryNote} setNote={setEntryNote} error={entryError} close={() => { if (!busy) setSheet(false); }} save={() => void saveCounts()} busy={busy} />}
     {credentials && <CredentialsSheet credentials={credentials} close={() => setCredentials(null)} />}
   </main>;
 }
@@ -175,7 +201,7 @@ function Login({ error, onError }: { error: string; onError: (s: string) => void
   return <main className="login-page"><i className="sprig a">❋</i><i className="sprig b">❋</i><section className="login-card"><Image className="login-emblem login-emblem-left" src="/nexus-team-emblem.png" alt="" width={38} height={38} /><Image className="login-emblem login-emblem-nit" src="/nit-shield-crest.png" alt="Nagpur Institute of Technology crest" width={48} height={32} /><div className="login-plant"><Plant percent={65} /></div><p className="eyebrow">WELCOME TO</p><h1>NEXUS</h1><p className="sub">Progress grows one step at a time.</p><form onSubmit={signIn}><label>Email or leader username<input autoComplete="username" value={identifier} onChange={e => setIdentifier(e.target.value)} placeholder="you@example.com or username" required /></label><PasswordField label="Password" value={password} onChange={setPassword} placeholder="Your password" autoComplete="current-password" required />{error && <p className="form-error" role="alert">{error}</p>}{info && <p className="form-info">{info}</p>}<button className="primary" disabled={sending} type="submit">{sending ? "Please wait…" : "Sign in"}<ChevronRight size={18} /></button></form><button className="role-switch" type="button" onClick={() => void sendSetup()} disabled={sending}>Admin: set or reset your password</button></section></main>;
 }
 function PasswordSetup({ done }: { done: () => void }) { const [password, setPassword] = useState(""), [error, setError] = useState(""), [busy, setBusy] = useState(false); const save = async (event: React.FormEvent) => { event.preventDefault(); if (password.length < 12) { setError("Use at least 12 characters."); return; } setBusy(true); const r = await supabase.auth.updateUser({ password }); setBusy(false); if (r.error) setError(r.error.message); else done(); }; return <main className="login-page"><section className="login-card"><Image className="login-emblem" src="/nexus-team-emblem.png" alt="" width={38} height={38} /><div className="login-plant"><Plant percent={100} /></div><h1>Welcome to NEXUS</h1><p className="sub">Choose your password to finish setting up your account.</p><form onSubmit={save}><PasswordField label="New password" value={password} onChange={setPassword} autoComplete="new-password" minLength={12} required />{error && <p className="form-error" role="alert">{error}</p>}<button className="primary" disabled={busy}>Save password<ChevronRight size={18} /></button></form></section></main>; }
-function LeaderDashboard({ team, name, motion, message, tapPlant, update, colleges, history }: { team: Team; name: string; motion: PlantMotion | null; message: PlantMessage | null; tapPlant: () => void; update: () => void; colleges: () => void; history: () => void }) {
+function LeaderDashboard({ team, name, motion, message, tapPlant, update, allocate, colleges, history }: { team: Team; name: string; motion: PlantMotion | null; message: PlantMessage | null; tapPlant: () => void; update: () => void; allocate: () => void; colleges: () => void; history: () => void }) {
   const progress = percent(team);
   return <section className="page">
     <p className="greeting">Hello, {name.split(" ")[0]} <span>☀</span></p>
@@ -190,6 +216,7 @@ function LeaderDashboard({ team, name, motion, message, tapPlant, update, colleg
       <p className="plant-tap-hint">Tap the plant for a little sway ✦</p>
     </div>
     <div className="counter-grid"><Counter color="peach" value={team.counts.interested} label="Interested" /><Counter color="yellow" value={team.counts.registered} label="Registered · unpaid" /><Counter color="sage" value={team.counts.confirmed} label="Confirmed · paid" /></div>
+    <CollegeBreakdown colleges={team.collegeTotals} unallocated={team.unallocated} onAllocate={allocate} />
     <button className="primary" onClick={update}><Edit3 size={18} />Update entries</button>
     <button className="link-row" onClick={colleges}><Building2 size={18} /><span>My assigned colleges</span><ChevronRight size={18} /></button>
     <button className="link-row" onClick={history}><FileText size={18} /><span>Saved entries & notes</span><ChevronRight size={18} /></button>
@@ -249,6 +276,6 @@ function CollegesPage({ admin, team, teams, colleges, back, refresh }: { admin: 
   const [name, setName] = useState(""), [error, setError] = useState(""), [busy, setBusy] = useState(false); const visible = admin ? colleges : team?.colleges ?? [];
   const create = async () => { if (!name.trim()) return; setBusy(true); setError(""); const r = await supabase.from("colleges").insert({ name: name.trim(), team_id: null }); if (r.error) setError(r.error.message); else { setName(""); await refresh(); } setBusy(false); };
   const assign = async (id: string, teamId: string | null) => { setBusy(true); setError(""); const r = await supabase.from("colleges").update({ team_id: teamId }).eq("id", id); if (r.error) setError(r.error.message); else await refresh(); setBusy(false); };
-  return <section className="page"><button className="back" onClick={back}><ArrowLeft size={20} /></button><p className="eyebrow">{admin ? "COLLEGE ASSIGNMENT" : "MY COLLEGES"}</p><h1>{admin ? "Colleges by team" : "Your assigned colleges"}</h1>{admin && <div className="college-create"><input aria-label="New college name" value={name} onChange={e => setName(e.target.value)} placeholder="New college name" /><button className="add-college" disabled={busy || !name.trim()} onClick={() => void create()}><Plus size={17} />Add college</button></div>}{error && <p className="form-error" role="alert">{error}</p>}<div className="college-list">{visible.map(c => <div className="college-card" key={c.id}><b><Building2 size={20} /></b><div><h3>{c.name}</h3>{admin ? <select aria-label={`Assign ${c.name}`} value={c.team_id ?? ""} disabled={busy} onChange={e => void assign(c.id, e.target.value || null)}><option value="">Unassigned</option>{teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select> : <p>Assigned to your team</p>}</div></div>)}</div>{!visible.length && <p className="hint">{admin ? "Add a college to start assigning it." : "No colleges are assigned yet."}</p>}<p className="hint">{admin ? "A college can be assigned to one team at a time." : "Need a change? Ask your admin to update assignments."}</p></section>;
+  return <section className="page"><button className="back" onClick={back}><ArrowLeft size={20} /></button><p className="eyebrow">{admin ? "COLLEGE ASSIGNMENT" : "MY COLLEGES"}</p><h1>{admin ? "Colleges by team" : "Your assigned colleges"}</h1>{!admin && team && <CollegeBreakdown colleges={team.collegeTotals} unallocated={team.unallocated} />}{admin && <div className="college-create"><input aria-label="New college name" value={name} onChange={e => setName(e.target.value)} placeholder="New college name" /><button className="add-college" disabled={busy || !name.trim()} onClick={() => void create()}><Plus size={17} />Add college</button></div>}{error && <p className="form-error" role="alert">{error}</p>}<div className="college-list">{visible.map(c => <div className="college-card" key={c.id}><b><Building2 size={20} /></b><div><h3>{c.name}</h3>{admin ? <select aria-label={`Assign ${c.name}`} value={c.team_id ?? ""} disabled={busy} onChange={e => void assign(c.id, e.target.value || null)}><option value="">Unassigned</option>{teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select> : <p>Assigned to your team</p>}</div></div>)}</div>{!visible.length && <p className="hint">{admin ? "Add a college to start assigning it." : "No colleges are assigned yet."}</p>}<p className="hint">{admin ? "A college can be assigned to one team at a time." : "Need a change? Ask your admin to update assignments."}</p></section>;
 }
 function ProfilePage({ profile, team, logout }: { profile: Profile; team?: Team; logout: () => void }) { return <section className="page profile"><div className="profile-avatar">{profile.display_name.slice(0, 2).toUpperCase()}</div><h1>{profile.display_name}</h1><p>{profile.role === "admin" ? "NEXUS administrator" : `${team?.name ?? "Team"} leader`}</p><div className="profile-card"><div><span>Role</span><strong>{profile.role === "admin" ? "Administrator" : "Team leader"}</strong></div><div><span>Username</span><strong>{profile.username}</strong></div>{profile.role === "leader" && <div><span>Team</span><strong>{team?.name ?? "Pending assignment"}</strong></div>}</div><button className="logout" onClick={logout}><LogOut size={18} />Log out</button></section>; }

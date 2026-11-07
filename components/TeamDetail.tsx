@@ -2,6 +2,8 @@
 
 import { ArrowLeft, Building2, ChevronRight, Edit3, UserRound, Users } from "lucide-react";
 import { Plant, stage } from "@/components/Plant";
+import { CollegeBreakdown, type CollegeTotal } from "@/components/CollegeBreakdown";
+import type { Counts } from "@/components/UpdateEntriesSheet";
 
 type TeamDetailData = {
   name: string;
@@ -10,6 +12,8 @@ type TeamDetailData = {
   members: string[];
   target: number;
   colleges: { id: string; name: string }[];
+  collegeTotals: CollegeTotal[];
+  unallocated: Counts;
   counts: { interested: number; registered: number; confirmed: number };
   updated: string | null;
 };
@@ -42,6 +46,8 @@ export function TeamDetail({ team, back, edit }: { team: TeamDetailData; back: (
       <div className="team-detail-panel-heading"><Building2 size={18} /><h2 id="team-colleges-title">Assigned colleges</h2><span>{team.colleges.length}</span></div>
       {team.colleges.length ? <ul className="team-detail-list">{team.colleges.map(college => <li key={college.id}><span className="team-detail-college-icon"><Building2 size={17} /></span>{college.name}</li>)}</ul> : <p className="team-detail-empty">No colleges are assigned to this team yet.</p>}
     </section>
+
+    <CollegeBreakdown colleges={team.collegeTotals} unallocated={team.unallocated} />
 
     <p className="team-detail-updated">Counts are reported by the team leader. Last saved {lastSaved}.</p>
     <button className="primary team-detail-edit" type="button" onClick={edit}><Edit3 size={18} />Edit team<ChevronRight size={18} /></button>

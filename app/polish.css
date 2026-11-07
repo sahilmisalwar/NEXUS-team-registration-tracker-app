@@ -149,3 +149,23 @@ button:not(:disabled){transition:transform .22s cubic-bezier(.22,1,.36,1),backgr
 @keyframes sparkle-pop{0%{opacity:0;transform:scale(.2) rotate(-20deg)}35%{opacity:1;transform:scale(1.2) rotate(8deg)}100%{opacity:0;transform:scale(.4) rotate(35deg) translateY(-12px)}}
 @keyframes growth-caption{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
 @keyframes plant-message-arrive{from{opacity:0;transform:translateY(8px) scale(.94)}to{opacity:1;transform:none}}
+.college-breakdown{margin:16px 0 20px;padding:17px;border:1px solid #e9e5da;border-radius:21px;background:#fffdf8;box-shadow:0 4px 15px #536c4c0a}
+.college-breakdown-heading{display:flex;align-items:center;gap:8px;color:#52775a}
+.college-breakdown-heading h2{margin:0;font-family:"Fraunces",Georgia,serif;font-size:21px;font-weight:500;color:#294338}
+.college-breakdown-intro,.college-breakdown-empty{margin:7px 0 12px;color:#7b8c7c;font-size:11px;line-height:1.5}
+.college-totals-row{padding:12px 0;border-top:1px solid #eee9df}
+.college-totals-name{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:9px}
+.college-totals-name strong{font-size:13px;color:#344f3c;overflow-wrap:anywhere}
+.college-totals-name span{font-size:10px;color:#899a8a;text-align:right}
+.college-totals-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}
+.college-totals-grid>div{border-radius:12px;padding:8px 5px;background:#edf4e9;text-align:center}
+.college-totals-grid strong{display:block;color:#365b40;font-family:"Fraunces",Georgia,serif;font-size:18px;font-weight:600;line-height:1.1}
+.college-totals-grid span{display:block;margin-top:3px;color:#6e856f;font-size:9px;line-height:1.25}
+.college-unallocated{margin-top:12px;padding:12px;border:1px solid #efdec6;border-radius:15px;background:#fdf5e9}
+.college-unallocated .college-totals-grid>div{background:#fffdf8}
+.college-unallocated p{margin:9px 0 0;color:#897967;font-size:10px;line-height:1.5}
+.college-allocate{display:block;width:100%;margin-top:11px;padding:10px;border:1px solid #d6c5aa;border-radius:11px;background:#fffdf8;color:#6a7356;font-size:11px;font-weight:800}
+.college-allocate:hover{background:#f8f0e3}
+.entry-legacy-note{padding:10px 11px;border-radius:12px;background:#fdf5e9;color:#897967}
+.entry-legacy-tag{display:inline-block;margin:3px 0 6px;padding:5px 8px;border-radius:8px;background:#fdf5e9;color:#897967;font-size:10px;line-height:1.35}
+.entries-team-prompt{margin:0 0 16px;padding:11px 13px;border-radius:13px;background:#edf4e9;color:#5a765f;font-size:11px}

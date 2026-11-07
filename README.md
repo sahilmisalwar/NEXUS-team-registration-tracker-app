@@ -17,7 +17,8 @@ npm run dev
 
 - Administrators create, edit, and delete teams, leader accounts, targets, and college assignments. The Teams list opens a read-only detail page with the leader, members, assigned colleges, target, and progress; editing remains a separate action. Counts are read-only to admins.
 - Deleting a team removes its leader login, counts, and saved entry history, and leaves its colleges unassigned. The app shows a new leader password once after creation or reset; existing passwords cannot be retrieved.
-- A leader can view their own team and colleges and update only their own team's Interested, Registered unpaid, and Confirmed paid totals. Every save requires an assigned college and can include a note; count changes and notes are kept in a dated history that admins can read but not edit.
+- A leader updates Interested, Registered unpaid, and Confirmed paid totals for one assigned college at a time. The database applies the same change to the team total in one transaction. Every save can include a note; admins can read college totals and dated history but cannot edit counts.
+- Earlier team-wide totals are shown as unallocated because old college-labelled edits cannot reliably reconstruct each college's count. If a leader knows their origins, **Assign earlier totals** moves those amounts into college totals without changing the team total and records the allocation in history.
 - Each college has one nullable team assignment. Saved changes update other signed-in screens through Supabase Realtime.
 - A five-stage vector plant grows with confirmed progress and blooms at 100%.
 
@@ -28,4 +29,4 @@ The existing NEXUS Supabase project already has the schema and Edge Function app
 Import this GitHub repository as a Next.js project with the repository root as the root directory. Vercel can use the included `npm run build` command. Once the production domain is known, set it as the Supabase Auth Site URL and allow that exact origin in the `admin-leaders` Edge Function's CORS list. This permits invitation and password-recovery links to return to the deployed app.
 
 The app does not collect registrations from participants. Leaders report aggregate counts directly.
-Totals saved before the college-entry feature remain intact; the dated entry history begins with new saves.
+Totals and entries saved before per-college tracking remain intact. Historical team-wide changes are labelled as unverified in entry history.
