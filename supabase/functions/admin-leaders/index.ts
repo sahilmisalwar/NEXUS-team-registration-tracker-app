@@ -1,6 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const allowedOrigins = new Set([
+  "https://nexus-team-registration-tracker.vercel.app",
   "https://nexus-progress-tracker-20261107.comfypin1.chatgpt.site",
   "http://127.0.0.1:5173",
   "http://localhost:5173",
