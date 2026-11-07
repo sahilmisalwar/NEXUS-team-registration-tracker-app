@@ -16,8 +16,8 @@ npm run dev
 ## Roles and data
 
 - Administrators create, edit, and delete teams, leader accounts, targets, and college assignments. Counts are read-only to admins.
-- Deleting a team removes its leader login and counts and leaves its colleges unassigned. The app shows a new leader password once after creation or reset; existing passwords cannot be retrieved.
-- A leader can view their own team and colleges and update only their own team's Interested, Registered unpaid, and Confirmed paid totals.
+- Deleting a team removes its leader login, counts, and saved entry history, and leaves its colleges unassigned. The app shows a new leader password once after creation or reset; existing passwords cannot be retrieved.
+- A leader can view their own team and colleges and update only their own team's Interested, Registered unpaid, and Confirmed paid totals. Every save requires an assigned college and can include a note; count changes and notes are kept in a dated history that admins can read but not edit.
 - Each college has one nullable team assignment. Saved changes update other signed-in screens through Supabase Realtime.
 - A five-stage vector plant grows with confirmed progress and blooms at 100%.
 
@@ -28,3 +28,4 @@ The existing NEXUS Supabase project already has the schema and Edge Function app
 Import this GitHub repository as a Next.js project with the repository root as the root directory. Vercel can use the included `npm run build` command. Once the production domain is known, set it as the Supabase Auth Site URL and allow that exact origin in the `admin-leaders` Edge Function's CORS list. This permits invitation and password-recovery links to return to the deployed app.
 
 The app does not collect registrations from participants. Leaders report aggregate counts directly.
+Totals saved before the college-entry feature remain intact; the dated entry history begins with new saves.
