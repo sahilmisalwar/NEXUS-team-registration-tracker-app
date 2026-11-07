@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useId, useState } from "react";
 import { FunctionsHttpError, type Session } from "@supabase/supabase-js";
 import { ArrowLeft, Building2, ChevronRight, Edit3, Eye, EyeOff, Home, Leaf, LogOut, Plus, Search, Settings2, Trash2, UserRound, Users, X } from "lucide-react";
 import { Plant, stage } from "@/components/Plant";
@@ -29,7 +29,8 @@ function Progress({ value }: { value: number }) { return <div className="progres
 function Counter({ color, value, label }: { color: string; value: number; label: string }) { return <div className={`counter ${color}`}><strong>{value}</strong><span>{label}</span></div>; }
 function PasswordField({ label, value, onChange, placeholder, autoComplete, required = false, minLength, className = "" }: { label: string; value: string; onChange: (value: string) => void; placeholder?: string; autoComplete?: string; required?: boolean; minLength?: number; className?: string }) {
   const [visible, setVisible] = useState(false);
-  return <label className={className}>{label}<span className="password-wrap"><input type={visible ? "text" : "password"} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} autoComplete={autoComplete} minLength={minLength} required={required} /><button type="button" className="password-toggle" aria-label={visible ? "Hide password" : "Show password"} aria-pressed={visible} onClick={() => setVisible(v => !v)}>{visible ? <EyeOff size={18} /> : <Eye size={18} />}</button></span></label>;
+  const id = useId();
+  return <div className={`password-field ${className}`}><label htmlFor={id}>{label}</label><span className="password-wrap"><input id={id} type={visible ? "text" : "password"} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} autoComplete={autoComplete} minLength={minLength} required={required} /><button type="button" className="password-toggle" aria-label={visible ? "Hide password" : "Show password"} aria-pressed={visible} onClick={() => setVisible(v => !v)}>{visible ? <EyeOff size={18} /> : <Eye size={18} />}</button></span></div>;
 }
 
 export default function NexusApp() {
