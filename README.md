@@ -15,7 +15,7 @@ npm run dev
 
 ## Roles and data
 
-- Administrators create, edit, and delete teams, leader accounts, targets, and college assignments. Counts are read-only to admins.
+- Administrators create, edit, and delete teams, leader accounts, targets, and college assignments. The Teams list opens a read-only detail page with the leader, members, assigned colleges, target, and progress; editing remains a separate action. Counts are read-only to admins.
 - Deleting a team removes its leader login, counts, and saved entry history, and leaves its colleges unassigned. The app shows a new leader password once after creation or reset; existing passwords cannot be retrieved.
 - A leader can view their own team and colleges and update only their own team's Interested, Registered unpaid, and Confirmed paid totals. Every save requires an assigned college and can include a note; count changes and notes are kept in a dated history that admins can read but not edit.
 - Each college has one nullable team assignment. Saved changes update other signed-in screens through Supabase Realtime.
