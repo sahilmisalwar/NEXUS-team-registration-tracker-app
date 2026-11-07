@@ -27,4 +27,3 @@ The existing NEXUS Supabase project already has the schema and Edge Function app
 Import this GitHub repository as a Next.js project with the repository root as the root directory. Vercel can use the included `npm run build` command. Once the production domain is known, set it as the Supabase Auth Site URL and allow that exact origin in the `admin-leaders` Edge Function's CORS list. This permits invitation and password-recovery links to return to the deployed app.
 
 The app does not collect registrations from participants. Leaders report aggregate counts directly.
-
