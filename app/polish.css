@@ -42,3 +42,5 @@ button:not(:disabled){transition:transform .22s cubic-bezier(.22,1,.36,1),backgr
 .brand-emblem{overflow:hidden}
 .brand-emblem img{display:block;width:31px;height:31px;border-radius:50%;object-fit:contain;opacity:.68;filter:saturate(.7)}
 .login-emblem{position:absolute;top:18px;right:19px;width:38px;height:38px;object-fit:contain;opacity:.56;filter:saturate(.68)}
+.login-emblem-left{right:auto;left:19px}
+.login-emblem-nit{width:48px;height:32px;top:21px;border-radius:9px;opacity:.6;filter:saturate(.65)}
