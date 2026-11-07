@@ -111,6 +111,8 @@ button:not(:disabled){transition:transform .22s cubic-bezier(.22,1,.36,1),backgr
 .plant-touch:hover .plant{transform:scale(1.035)}
 .plant-touch:active .plant{transform:scale(.98)}
 .plant-touch:focus-visible{outline:3px solid #8ead8a;outline-offset:2px}
+.plant-message{position:relative;width:fit-content;max-width:100%;margin:-2px auto 16px;padding:10px 15px;border:1px solid #e9e4d5;border-radius:16px;background:#fffdf8;color:#456f50;box-shadow:0 5px 15px #5b806018;font-size:12px;font-weight:700;line-height:1.45;text-align:center;animation:plant-message-arrive .55s cubic-bezier(.2,1.15,.35,1) both}
+.plant-message::before{content:"";position:absolute;top:-6px;left:calc(50% - 6px);width:11px;height:11px;transform:rotate(45deg);border-top:1px solid #e9e4d5;border-left:1px solid #e9e4d5;background:#fffdf8}
 .plant-tap-hint{text-align:center;font-size:10px;letter-spacing:.02em;color:#7f9a81;margin:6px 0 0}
 .growth-encourage{animation:growth-caption .55s cubic-bezier(.22,1,.36,1) both}
 .plant-growing .plant-growth-body{animation:plant-lift 2.4s cubic-bezier(.22,1,.36,1) both}
@@ -146,3 +148,4 @@ button:not(:disabled){transition:transform .22s cubic-bezier(.22,1,.36,1),backgr
 @keyframes dew-fall{0%{opacity:0;transform:translateY(-8px) rotate(-45deg) scale(.6)}20%{opacity:.9}80%{opacity:.8}100%{opacity:0;transform:translateY(92px) rotate(-45deg) scale(.5)}}
 @keyframes sparkle-pop{0%{opacity:0;transform:scale(.2) rotate(-20deg)}35%{opacity:1;transform:scale(1.2) rotate(8deg)}100%{opacity:0;transform:scale(.4) rotate(35deg) translateY(-12px)}}
 @keyframes growth-caption{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+@keyframes plant-message-arrive{from{opacity:0;transform:translateY(8px) scale(.94)}to{opacity:1;transform:none}}

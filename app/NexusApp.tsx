@@ -16,9 +16,18 @@ type Team = { id: string; name: string; leader: string; leaderId: string | null;
 type LeaderCredentials = { teamName: string; username: string; password: string; kind: "created" | "reset" };
 type Screen = "login" | "admin" | "leader" | "teams" | "team-detail" | "team-form" | "colleges" | "entries" | "profile";
 type PlantMotion = { kind: "grow" | "nudge"; fromPercent: number; id: number };
+type PlantMessage = { text: string; id: number };
 const entryColumns = "id,team_id,college_id,college_name,note,interested,registered_unpaid,confirmed_paid,previous_interested,previous_registered_unpaid,previous_confirmed_paid,created_at";
 const entryPageSize = 50;
 const empty = (): Counts => ({ interested: 0, registered: 0, confirmed: 0 });
+function savedEntryMessage(confirmed: number, target: number, increased: boolean) {
+  const remaining = Math.max(0, target - confirmed);
+  if (!remaining) return increased ? "You did it! Your plant is blooming. Amazing work!" : "Entry saved. Your plant is in full bloom!";
+  if (remaining === 1) return "Just one more confirmed registration to go. You can do this!";
+  if (remaining <= 5) return `You can do this! Just ${remaining} more to go.`;
+  if (remaining <= Math.ceil(target / 4)) return `So close! ${remaining} more confirmed registrations to go.`;
+  return increased ? `Lovely progress! ${remaining} more confirmed registrations until your plant blooms.` : `Entry saved. Keep going—${remaining} more to go!`;
+}
 const percent = (t: Team) => t.target ? t.counts.confirmed / t.target * 100 : 0;
 const pct = (n: number) => `${Math.min(100, Math.round(n || 0))}%`;
 const errText = (e: unknown) => e instanceof Error ? e.message : "Something went wrong. Please try again.";
@@ -46,6 +55,7 @@ export default function NexusApp() {
   const [screen, setScreen] = useState<Screen>("login"), [selected, setSelected] = useState<string | null>(null), [editing, setEditing] = useState<string | null>(null);
   const [sheet, setSheet] = useState(false), [draft, setDraft] = useState<Counts>(empty()), [baseCounts, setBaseCounts] = useState<Counts>(empty()), [entryCollegeId, setEntryCollegeId] = useState(""), [entryNote, setEntryNote] = useState(""), [entryError, setEntryError] = useState(""), [busy, setBusy] = useState(false), [error, setError] = useState(""), [notice, setNotice] = useState("");
   const [plantMotion, setPlantMotion] = useState<PlantMotion | null>(null);
+  const [plantMessage, setPlantMessage] = useState<PlantMessage | null>(null);
   const [credentials, setCredentials] = useState<LeaderCredentials | null>(null);
   const [needsPassword, setNeedsPassword] = useState(() => authLinkType === "invite" || authLinkType === "recovery");
   const flash = (s: string) => { setNotice(s); window.setTimeout(() => setNotice(""), 3000); };
@@ -80,7 +90,7 @@ export default function NexusApp() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, current) => {
       if (event === "PASSWORD_RECOVERY") setNeedsPassword(true);
       setSession(current); setReady(true);
-      if (!current) { setProfile(null); setTeams([]); setColleges([]); setEntries([]); setHasOlderEntries(false); setCredentials(null); setPlantMotion(null); setScreen("login"); }
+      if (!current) { setProfile(null); setTeams([]); setColleges([]); setEntries([]); setHasOlderEntries(false); setCredentials(null); setPlantMotion(null); setPlantMessage(null); setScreen("login"); }
     });
     return () => { live = false; subscription.unsubscribe(); };
   }, []);
@@ -98,6 +108,11 @@ export default function NexusApp() {
     const timer = window.setTimeout(() => setPlantMotion(null), plantMotion.kind === "grow" ? 3300 : 1100);
     return () => window.clearTimeout(timer);
   }, [plantMotion]);
+  useEffect(() => {
+    if (!plantMessage) return;
+    const timer = window.setTimeout(() => setPlantMessage(null), 9000);
+    return () => window.clearTimeout(timer);
+  }, [plantMessage]);
 
   const role = profile?.role;
   const team = role === "leader" ? teams.find(t => t.leaderId === session?.user.id) : teams.find(t => t.id === selected) ?? teams[0];
@@ -116,6 +131,7 @@ export default function NexusApp() {
     setTeams(current => current.map(item => item.id === team.id ? { ...item, counts: nextCounts, updated: new Date().toISOString() } : item));
     setSheet(false); setScreen("leader");
     setPlantMotion(current => ({ kind: nextCounts.confirmed > baseCounts.confirmed ? "grow" : "nudge", fromPercent: previousPercent, id: (current?.id ?? 0) + 1 }));
+    setPlantMessage(current => ({ text: savedEntryMessage(nextCounts.confirmed, team.target, nextCounts.confirmed > baseCounts.confirmed), id: (current?.id ?? 0) + 1 }));
     flash("Entry saved"); if (session) void reload(session.user.id, true);
   };
   const openUpdate = () => { if (team && role === "leader") { setDraft({ ...team.counts }); setBaseCounts({ ...team.counts }); setEntryCollegeId(""); setEntryNote(""); setEntryError(""); setSheet(true); } };
@@ -139,7 +155,7 @@ export default function NexusApp() {
   return <main className="app-shell"><header className="topbar"><button className="brand" onClick={home}><b className="brand-emblem"><Image src="/nexus-team-emblem.png" alt="" width={31} height={31} /></b><span>NEXUS<small>PROGRESS TRACKER</small></span></button><button className="avatar" onClick={() => setScreen("profile")}>{profile.display_name.slice(0, 2).toUpperCase()}</button></header>
     {notice && <div className="toast">✓ {notice}</div>}{error && <div className="app-error" role="alert">{error}<button onClick={() => setError("")}>Dismiss</button></div>}{busy && <p className="loading-note">Updating your plant…</p>}
     {screen === "admin" && <AdminDashboard teams={teams} entries={entries} manage={() => setScreen("teams")} view={id => { setSelected(id); setScreen("team-detail"); }} history={() => setScreen("entries")} create={() => { setEditing(null); setScreen("team-form"); }} />}
-    {screen === "leader" && (team ? <LeaderDashboard team={team} name={profile.display_name} motion={plantMotion} tapPlant={tapPlant} update={openUpdate} colleges={() => setScreen("colleges")} history={() => setScreen("entries")} /> : <section className="page empty-state"><Plant percent={0} /><h1>Your team is being prepared.</h1><p>Ask your administrator to assign your account to a team.</p></section>)}
+    {screen === "leader" && (team ? <LeaderDashboard team={team} name={profile.display_name} motion={plantMotion} message={plantMessage} tapPlant={tapPlant} update={openUpdate} colleges={() => setScreen("colleges")} history={() => setScreen("entries")} /> : <section className="page empty-state"><Plant percent={0} /><h1>Your team is being prepared.</h1><p>Ask your administrator to assign your account to a team.</p></section>)}
     {screen === "teams" && <TeamsPage teams={teams} create={() => { setEditing(null); setScreen("team-form"); }} view={id => { setSelected(id); setScreen("team-detail"); }} />}
     {screen === "team-detail" && (selectedTeam ? <TeamDetail team={selectedTeam} back={() => setScreen("teams")} edit={() => { setEditing(selectedTeam.id); setScreen("team-form"); }} /> : <section className="page empty-state"><h1>Team unavailable</h1><p>This team may have been removed.</p><button className="primary" onClick={() => setScreen("teams")}>Back to teams</button></section>)}
     {screen === "team-form" && <TeamWizard key={editing ?? "new"} team={teams.find(t => t.id === editing)} colleges={colleges} back={() => setScreen(editing ? "team-detail" : "teams")} saved={async (id, login) => { setSelected(id); if (session) await reload(session.user.id); setScreen(editing ? "team-detail" : "teams"); if (login) setCredentials(login); else flash(editing ? "Team updated" : "Team created"); }} deleted={async () => { setSelected(null); setEditing(null); if (session) await reload(session.user.id); setScreen("teams"); flash("Team deleted"); }} />}
@@ -159,7 +175,27 @@ function Login({ error, onError }: { error: string; onError: (s: string) => void
   return <main className="login-page"><i className="sprig a">❋</i><i className="sprig b">❋</i><section className="login-card"><Image className="login-emblem login-emblem-left" src="/nexus-team-emblem.png" alt="" width={38} height={38} /><Image className="login-emblem login-emblem-nit" src="/nit-shield-crest.png" alt="Nagpur Institute of Technology crest" width={48} height={32} /><div className="login-plant"><Plant percent={65} /></div><p className="eyebrow">WELCOME TO</p><h1>NEXUS</h1><p className="sub">Progress grows one step at a time.</p><form onSubmit={signIn}><label>Email or leader username<input autoComplete="username" value={identifier} onChange={e => setIdentifier(e.target.value)} placeholder="you@example.com or username" required /></label><PasswordField label="Password" value={password} onChange={setPassword} placeholder="Your password" autoComplete="current-password" required />{error && <p className="form-error" role="alert">{error}</p>}{info && <p className="form-info">{info}</p>}<button className="primary" disabled={sending} type="submit">{sending ? "Please wait…" : "Sign in"}<ChevronRight size={18} /></button></form><button className="role-switch" type="button" onClick={() => void sendSetup()} disabled={sending}>Admin: set or reset your password</button></section></main>;
 }
 function PasswordSetup({ done }: { done: () => void }) { const [password, setPassword] = useState(""), [error, setError] = useState(""), [busy, setBusy] = useState(false); const save = async (event: React.FormEvent) => { event.preventDefault(); if (password.length < 12) { setError("Use at least 12 characters."); return; } setBusy(true); const r = await supabase.auth.updateUser({ password }); setBusy(false); if (r.error) setError(r.error.message); else done(); }; return <main className="login-page"><section className="login-card"><Image className="login-emblem" src="/nexus-team-emblem.png" alt="" width={38} height={38} /><div className="login-plant"><Plant percent={100} /></div><h1>Welcome to NEXUS</h1><p className="sub">Choose your password to finish setting up your account.</p><form onSubmit={save}><PasswordField label="New password" value={password} onChange={setPassword} autoComplete="new-password" minLength={12} required />{error && <p className="form-error" role="alert">{error}</p>}<button className="primary" disabled={busy}>Save password<ChevronRight size={18} /></button></form></section></main>; }
-function LeaderDashboard({ team, name, motion, tapPlant, update, colleges, history }: { team: Team; name: string; motion: PlantMotion | null; tapPlant: () => void; update: () => void; colleges: () => void; history: () => void }) { const progress = percent(team); return <section className="page"><p className="greeting">Hello, {name.split(" ")[0]} <span>☀</span></p><h1>Let’s help your plant grow.</h1><div className="garden-card"><div className="garden-heading"><div><p className="eyebrow">{team.name.toUpperCase()}</p><h2>{team.counts.confirmed} <small>of {team.target} confirmed</small></h2></div><b>Stage {stage(progress)}/5</b></div><button className="plant-touch" type="button" aria-label={`Tap the plant, stage ${stage(progress)} of 5`} onClick={tapPlant}><Plant percent={progress} motion={motion?.kind} fromPercent={motion?.fromPercent} motionKey={motion?.id} /></button><div className="percent-row"><strong>{pct(progress)}</strong><span>toward your target</span></div><Progress value={progress} /><p className={`encourage ${motion ? "growth-encourage" : ""}`} aria-live="polite">{motion?.kind === "grow" ? progress >= 100 ? "Your plant is blooming!" : "Look, your plant is growing!" : progress >= 100 ? "Your plant is in full bloom!" : "Every confirmed registration helps it grow."}</p><p className="plant-tap-hint">Tap the plant for a little sway ✦</p></div><div className="counter-grid"><Counter color="peach" value={team.counts.interested} label="Interested" /><Counter color="yellow" value={team.counts.registered} label="Registered · unpaid" /><Counter color="sage" value={team.counts.confirmed} label="Confirmed · paid" /></div><button className="primary" onClick={update}><Edit3 size={18} />Update entries</button><button className="link-row" onClick={colleges}><Building2 size={18} /><span>My assigned colleges</span><ChevronRight size={18} /></button><button className="link-row" onClick={history}><FileText size={18} /><span>Saved entries & notes</span><ChevronRight size={18} /></button><p className="hint">Last saved {team.updated ? new Date(team.updated).toLocaleString() : "not yet"}</p></section>; }
+function LeaderDashboard({ team, name, motion, message, tapPlant, update, colleges, history }: { team: Team; name: string; motion: PlantMotion | null; message: PlantMessage | null; tapPlant: () => void; update: () => void; colleges: () => void; history: () => void }) {
+  const progress = percent(team);
+  return <section className="page">
+    <p className="greeting">Hello, {name.split(" ")[0]} <span>☀</span></p>
+    <h1>Let’s help your plant grow.</h1>
+    <div className="garden-card">
+      <div className="garden-heading"><div><p className="eyebrow">{team.name.toUpperCase()}</p><h2>{team.counts.confirmed} <small>of {team.target} confirmed</small></h2></div><b>Stage {stage(progress)}/5</b></div>
+      <button className="plant-touch" type="button" aria-label={`Tap the plant, stage ${stage(progress)} of 5`} onClick={tapPlant}><Plant percent={progress} motion={motion?.kind} fromPercent={motion?.fromPercent} motionKey={motion?.id} /></button>
+      {message && <p className="plant-message" role="status" key={message.id}>{message.text}</p>}
+      <div className="percent-row"><strong>{pct(progress)}</strong><span>toward your target</span></div>
+      <Progress value={progress} />
+      <p className={`encourage ${motion ? "growth-encourage" : ""}`}>{motion?.kind === "grow" ? progress >= 100 ? "Your plant is blooming!" : "Look, your plant is growing!" : progress >= 100 ? "Your plant is in full bloom!" : "Every confirmed registration helps it grow."}</p>
+      <p className="plant-tap-hint">Tap the plant for a little sway ✦</p>
+    </div>
+    <div className="counter-grid"><Counter color="peach" value={team.counts.interested} label="Interested" /><Counter color="yellow" value={team.counts.registered} label="Registered · unpaid" /><Counter color="sage" value={team.counts.confirmed} label="Confirmed · paid" /></div>
+    <button className="primary" onClick={update}><Edit3 size={18} />Update entries</button>
+    <button className="link-row" onClick={colleges}><Building2 size={18} /><span>My assigned colleges</span><ChevronRight size={18} /></button>
+    <button className="link-row" onClick={history}><FileText size={18} /><span>Saved entries & notes</span><ChevronRight size={18} /></button>
+    <p className="hint">Last saved {team.updated ? new Date(team.updated).toLocaleString() : "not yet"}</p>
+  </section>;
+}
 function AdminDashboard({ teams, entries, manage, view, history, create }: { teams: Team[]; entries: CountEntry[]; manage: () => void; view: (id: string) => void; history: () => void; create: () => void }) { const confirmed = teams.reduce((n, t) => n + t.counts.confirmed, 0), target = teams.reduce((n, t) => n + t.target, 0), progress = target ? confirmed / target * 100 : 0; return <section className="page"><p className="greeting">Admin overview <span>✦</span></p><h1>Every plant at a glance.</h1><div className="admin-hero"><div><p className="eyebrow">TOTAL CONFIRMED</p><h2>{confirmed}<small> / {target}</small></h2><Progress value={progress} /><p>{pct(progress)} of the collective target</p></div><Plant percent={progress} compact /></div><div className="section-row"><h2>Team plants</h2><button onClick={manage}>Manage</button></div>{teams.length ? <div className="team-list">{teams.slice(0, 3).map(t => <button className="team-card clickable" aria-label={`View ${t.name} details`} key={t.id} onClick={() => view(t.id)}><Plant percent={percent(t)} compact /><div><h3>{t.name}</h3><p>{t.leader} · {pct(percent(t))} complete</p><Progress value={percent(t)} /></div><strong>{t.counts.confirmed}/{t.target}</strong></button>)}</div> : <div className="empty-card"><p>There are no teams yet. Create the first one to start growing.</p><button className="primary" onClick={create}><Plus size={18} />Create a team</button></div>}<div className="section-row"><h2>Recent entries</h2><button onClick={history}>View all</button></div>{entries.length ? <div className="entry-list">{entries.slice(0, 3).map(entry => <EntryCard key={entry.id} entry={entry} teamName={teams.find(t => t.id === entry.team_id)?.name ?? "Team"} />)}</div> : <div className="empty-card">No saved entries yet. Notes from team leaders will appear here.</div>}<p className="read-only"><Settings2 size={15} />Counts and notes are leader-reported and read-only for admins.</p></section>; }
 function TeamsPage({ teams, create, view }: { teams: Team[]; create: () => void; view: (id: string) => void }) { const [query, setQuery] = useState(""); const visible = teams.filter(t => `${t.name} ${t.leader}`.toLowerCase().includes(query.toLowerCase())); return <section className="page"><div className="title-row"><div><p className="eyebrow">ADMIN</p><h1>Manage teams</h1></div><button className="round-add" aria-label="Create team" onClick={create}><Plus /></button></div><div className="search"><Search size={17} /><input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search teams or leaders" /></div><div className="team-list">{visible.map(t => <button className="team-card clickable" key={t.id} aria-label={`View ${t.name} details`} onClick={() => view(t.id)}><Plant percent={percent(t)} compact /><div><h3>{t.name}</h3><p>{t.leader} · {pct(percent(t))} complete</p><Progress value={percent(t)} /></div><ChevronRight /></button>)}</div>{!visible.length && <p className="hint">{teams.length ? "No teams match your search." : "No teams yet. Tap + to create one."}</p>}</section>; }
 
