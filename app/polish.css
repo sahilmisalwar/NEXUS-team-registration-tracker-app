@@ -43,6 +43,7 @@ button:not(:disabled){transition:transform .22s cubic-bezier(.22,1,.36,1),backgr
 .brand-emblem img{display:block;width:31px;height:31px;border-radius:50%;object-fit:contain;opacity:.68;filter:saturate(.7)}
 .login-emblem{position:absolute;top:18px;right:19px;width:38px;height:38px;object-fit:contain;opacity:.56;filter:saturate(.68)}
 .login-emblem-left{right:auto;left:19px}
+.college-card>div{min-width:0}.college-card h3{overflow-wrap:anywhere}.college-actions{display:flex;align-self:flex-start;gap:5px;flex:none}.college-actions button{width:34px;height:34px;display:grid;place-items:center;border-radius:11px;background:#eef4e9;color:#4d7054}.college-actions button:hover{background:#dce8dc}.college-actions .remove-college{background:#fff2eb;color:#a65f4f}.college-actions .remove-college:hover{background:#f8ddd1}.confirm-card .field{display:block;margin:16px 0}.confirm-card .field input{width:100%}
 .login-emblem-nit{width:48px;height:32px;top:21px;border-radius:9px;opacity:.6;filter:saturate(.65)}
 .update-sheet{max-height:min(92dvh,850px);overflow-y:auto;padding-bottom:max(28px,env(safe-area-inset-bottom))}
 .entry-field{display:block;margin:15px 0 0;font-size:12px;font-weight:800;color:#4e6d55}

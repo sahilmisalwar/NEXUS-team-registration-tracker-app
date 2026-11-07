@@ -273,9 +273,79 @@ function CredentialsSheet({ credentials, close }: { credentials: LeaderCredentia
 }
 
 function CollegesPage({ admin, team, teams, colleges, back, refresh }: { admin: boolean; team?: Team; teams: Team[]; colleges: College[]; back: () => void; refresh: () => Promise<void> }) {
-  const [name, setName] = useState(""), [error, setError] = useState(""), [busy, setBusy] = useState(false); const visible = admin ? colleges : team?.colleges ?? [];
-  const create = async () => { if (!name.trim()) return; setBusy(true); setError(""); const r = await supabase.from("colleges").insert({ name: name.trim(), team_id: null }); if (r.error) setError(r.error.message); else { setName(""); await refresh(); } setBusy(false); };
-  const assign = async (id: string, teamId: string | null) => { setBusy(true); setError(""); const r = await supabase.from("colleges").update({ team_id: teamId }).eq("id", id); if (r.error) setError(r.error.message); else await refresh(); setBusy(false); };
-  return <section className="page"><button className="back" onClick={back}><ArrowLeft size={20} /></button><p className="eyebrow">{admin ? "COLLEGE ASSIGNMENT" : "MY COLLEGES"}</p><h1>{admin ? "Colleges by team" : "Your assigned colleges"}</h1>{!admin && team && <CollegeBreakdown colleges={team.collegeTotals} unallocated={team.unallocated} />}{admin && <div className="college-create"><input aria-label="New college name" value={name} onChange={e => setName(e.target.value)} placeholder="New college name" /><button className="add-college" disabled={busy || !name.trim()} onClick={() => void create()}><Plus size={17} />Add college</button></div>}{error && <p className="form-error" role="alert">{error}</p>}<div className="college-list">{visible.map(c => <div className="college-card" key={c.id}><b><Building2 size={20} /></b><div><h3>{c.name}</h3>{admin ? <select aria-label={`Assign ${c.name}`} value={c.team_id ?? ""} disabled={busy} onChange={e => void assign(c.id, e.target.value || null)}><option value="">Unassigned</option>{teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select> : <p>Assigned to your team</p>}</div></div>)}</div>{!visible.length && <p className="hint">{admin ? "Add a college to start assigning it." : "No colleges are assigned yet."}</p>}<p className="hint">{admin ? "A college can be assigned to one team at a time." : "Need a change? Ask your admin to update assignments."}</p></section>;
+  const [name, setName] = useState(""), [error, setError] = useState(""), [busy, setBusy] = useState(false);
+  const [editing, setEditing] = useState<College | null>(null), [editName, setEditName] = useState("");
+  const [deleting, setDeleting] = useState<College | null>(null), [dialogError, setDialogError] = useState("");
+  const visible = admin ? colleges : team?.colleges ?? [];
+  const closeDialog = () => { if (!busy) { setEditing(null); setDeleting(null); setDialogError(""); } };
+  const create = async () => {
+    if (!admin || !name.trim() || busy) return;
+    setBusy(true); setError("");
+    try {
+      const { error: saveError } = await supabase.from("colleges").insert({ name: name.trim(), team_id: null });
+      if (saveError) throw saveError;
+      setName(""); await refresh();
+    } catch (e) { setError(errText(e)); }
+    finally { setBusy(false); }
+  };
+  const assign = async (id: string, teamId: string | null) => {
+    if (!admin || busy) return;
+    setBusy(true); setError("");
+    try {
+      const { error: saveError } = await supabase.from("colleges").update({ team_id: teamId }).eq("id", id);
+      if (saveError) throw saveError;
+      await refresh();
+    } catch (e) { setError(errText(e)); }
+    finally { setBusy(false); }
+  };
+  const rename = async () => {
+    if (!admin || !editing || busy) return;
+    const nextName = editName.trim();
+    if (!nextName || nextName.length > 160) { setDialogError("Enter a college name of up to 160 characters."); return; }
+    if (nextName === editing.name) { closeDialog(); return; }
+    setBusy(true); setDialogError("");
+    try {
+      const { data, error: saveError } = await supabase.from("colleges").update({ name: nextName }).eq("id", editing.id).select("id").maybeSingle();
+      if (saveError) throw new Error(saveError.code === "23505" ? "A college with this name already exists." : saveError.message);
+      if (!data) throw new Error("This college is no longer available. Refresh the page and try again.");
+      await refresh(); setEditing(null);
+    } catch (e) { setDialogError(errText(e)); }
+    finally { setBusy(false); }
+  };
+  const remove = async () => {
+    if (!admin || !deleting || busy) return;
+    setBusy(true); setDialogError("");
+    try {
+      const [entryCheck, totalCheck] = await Promise.all([
+        supabase.from("count_entries").select("id", { count: "exact", head: true }).eq("college_id", deleting.id),
+        supabase.from("college_counts").select("college_id", { count: "exact", head: true }).eq("college_id", deleting.id),
+      ]);
+      if (entryCheck.error || totalCheck.error) throw new Error("Could not check this college's saved entries. Try again.");
+      if ((entryCheck.count ?? 0) > 0 || (totalCheck.count ?? 0) > 0)
+        throw new Error("This college has saved entries or totals and cannot be deleted. Its history will stay intact.");
+      const { data, error: deleteError } = await supabase.from("colleges").delete().eq("id", deleting.id).select("id").maybeSingle();
+      if (deleteError) throw new Error(deleteError.code === "23503" ? "This college has saved entries or totals and cannot be deleted." : deleteError.message);
+      if (!data) throw new Error("This college is no longer available. Refresh the page and try again.");
+      await refresh(); setDeleting(null);
+    } catch (e) { setDialogError(errText(e)); }
+    finally { setBusy(false); }
+  };
+  return <section className="page">
+    <button className="back" onClick={back}><ArrowLeft size={20} /></button>
+    <p className="eyebrow">{admin ? "COLLEGE ASSIGNMENT" : "MY COLLEGES"}</p>
+    <h1>{admin ? "Colleges by team" : "Your assigned colleges"}</h1>
+    {!admin && team && <CollegeBreakdown colleges={team.collegeTotals} unallocated={team.unallocated} />}
+    {admin && <div className="college-create"><input aria-label="New college name" value={name} onChange={e => setName(e.target.value)} placeholder="New college name" /><button className="add-college" disabled={busy || !name.trim()} onClick={() => void create()}><Plus size={17} />Add college</button></div>}
+    {error && <p className="form-error" role="alert">{error}</p>}
+    <div className="college-list">{visible.map(c => <div className="college-card" key={c.id}>
+      <b><Building2 size={20} /></b>
+      <div><h3>{c.name}</h3>{admin ? <select aria-label={`Assign ${c.name}`} value={c.team_id ?? ""} disabled={busy} onChange={e => void assign(c.id, e.target.value || null)}><option value="">Unassigned</option>{teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select> : <p>Assigned to your team</p>}</div>
+      {admin && <span className="college-actions"><button type="button" aria-label={`Edit ${c.name} name`} title="Edit name" disabled={busy} onClick={() => { setEditing(c); setEditName(c.name); setDialogError(""); }}><Edit3 size={16} /></button><button type="button" className="remove-college" aria-label={`Delete ${c.name}`} title="Delete college" disabled={busy} onClick={() => { setDeleting(c); setDialogError(""); }}><Trash2 size={16} /></button></span>}
+    </div>)}</div>
+    {!visible.length && <p className="hint">{admin ? "Add a college to start assigning it." : "No colleges are assigned yet."}</p>}
+    <p className="hint">{admin ? "A college can be assigned to one team at a time." : "Need a change? Ask your admin to update assignments."}</p>
+    {editing && <div className="sheet-backdrop confirm-backdrop" onClick={closeDialog}><section className="confirm-card" role="dialog" aria-modal="true" aria-labelledby="edit-college-title" onClick={e => e.stopPropagation()}><p className="eyebrow">COLLEGE DETAILS</p><h2 id="edit-college-title">Edit college name</h2><label className="field">College name<input value={editName} onChange={e => setEditName(e.target.value)} maxLength={160} autoFocus onKeyDown={e => { if (e.key === "Enter") void rename(); }} /></label>{dialogError && <p className="form-error" role="alert">{dialogError}</p>}<button className="primary" disabled={busy || !editName.trim()} onClick={() => void rename()}>{busy ? "Saving…" : "Save name"}</button><button className="cancel-action" disabled={busy} onClick={closeDialog}>Cancel</button></section></div>}
+    {deleting && <div className="sheet-backdrop confirm-backdrop" onClick={closeDialog}><section className="confirm-card" role="dialog" aria-modal="true" aria-labelledby="delete-college-title" onClick={e => e.stopPropagation()}><p className="eyebrow">REMOVE COLLEGE</p><h2 id="delete-college-title">Delete {deleting.name}?</h2><p>This removes the college from its team assignment. Colleges with saved entries or totals cannot be deleted, so their history stays intact.</p>{dialogError && <p className="form-error" role="alert">{dialogError}</p>}<button className="danger-action" disabled={busy} onClick={() => void remove()}><Trash2 size={17} />{busy ? "Deleting…" : "Delete college"}</button><button className="cancel-action" disabled={busy} onClick={closeDialog}>Keep college</button></section></div>}
+  </section>;
 }
 function ProfilePage({ profile, team, logout }: { profile: Profile; team?: Team; logout: () => void }) { return <section className="page profile"><div className="profile-avatar">{profile.display_name.slice(0, 2).toUpperCase()}</div><h1>{profile.display_name}</h1><p>{profile.role === "admin" ? "NEXUS administrator" : `${team?.name ?? "Team"} leader`}</p><div className="profile-card"><div><span>Role</span><strong>{profile.role === "admin" ? "Administrator" : "Team leader"}</strong></div><div><span>Username</span><strong>{profile.username}</strong></div>{profile.role === "leader" && <div><span>Team</span><strong>{team?.name ?? "Pending assignment"}</strong></div>}</div><button className="logout" onClick={logout}><LogOut size={18} />Log out</button></section>; }
