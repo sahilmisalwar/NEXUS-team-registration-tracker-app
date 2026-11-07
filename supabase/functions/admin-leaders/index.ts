@@ -33,8 +33,12 @@ Deno.serve(async (request) => {
   const admin = createClient(url, serviceKey, { auth: { persistSession: false } });
   const { data: { user }, error: authError } = await admin.auth.getUser(token);
   if (authError || !user) return respond({ error: "Invalid session" }, 401, origin);
-  const { data: profile } = await admin.from("profiles").select("role")
-    .eq("user_id", user.id).single();
+  const { data: profile, error: roleLookupError } = await admin.from("profiles").select("role")
+    .eq("user_id", user.id).maybeSingle();
+  if (roleLookupError) {
+    console.error("Admin profile lookup failed", roleLookupError.code, roleLookupError.message);
+    return respond({ error: "Could not check admin access. Try again." }, 500, origin);
+  }
   if (profile?.role !== "admin") return respond({ error: "Admin access required" }, 403, origin);
 
   let input: Record<string, unknown>;
@@ -44,8 +48,12 @@ Deno.serve(async (request) => {
   if (typeof teamId !== "string" || !/^[0-9a-f-]{36}$/i.test(teamId))
     return respond({ error: "Valid team required" }, 400, origin);
   const { data: team, error: teamError } = await admin.from("teams")
-    .select("id, leader_user_id").eq("id", teamId).single();
-  if (teamError || !team) return respond({ error: "Team not found" }, 404, origin);
+    .select("id, leader_user_id").eq("id", teamId).maybeSingle();
+  if (teamError) {
+    console.error("Team lookup failed", teamError.code, teamError.message);
+    return respond({ error: "Could not check the team. Try again." }, 500, origin);
+  }
+  if (!team) return respond({ error: "Team not found" }, 404, origin);
 
   if (input.action === "reset_password") {
     const password = input.password;

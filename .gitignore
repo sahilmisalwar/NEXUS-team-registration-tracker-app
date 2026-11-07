@@ -5,6 +5,7 @@ node_modules/
 *.tsbuildinfo
 next-env.d.ts
 .vercel/
+supabase/.temp/
 dist/
 coverage/
 .DS_Store

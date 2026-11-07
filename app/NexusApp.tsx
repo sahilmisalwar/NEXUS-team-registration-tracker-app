@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import type { Session } from "@supabase/supabase-js";
+import { FunctionsHttpError, type Session } from "@supabase/supabase-js";
 import { ArrowLeft, Building2, ChevronRight, Edit3, Home, Leaf, LogOut, Plus, Search, Settings2, UserRound, Users, X } from "lucide-react";
 import { Plant, stage } from "@/components/Plant";
 import { authLinkType, supabase } from "@/lib/supabase";
@@ -15,6 +15,15 @@ const empty = (): Counts => ({ interested: 0, registered: 0, confirmed: 0 });
 const percent = (t: Team) => t.target ? t.counts.confirmed / t.target * 100 : 0;
 const pct = (n: number) => `${Math.min(100, Math.round(n || 0))}%`;
 const errText = (e: unknown) => e instanceof Error ? e.message : "Something went wrong. Please try again.";
+async function edgeErrorText(error: unknown) {
+  if (error instanceof FunctionsHttpError) {
+    try {
+      const body: unknown = await error.context.json();
+      if (body && typeof body === "object" && "error" in body && typeof body.error === "string") return body.error;
+    } catch { /* Keep the network error if the response is not JSON. */ }
+  }
+  return errText(error);
+}
 function Progress({ value }: { value: number }) { return <div className="progress"><span style={{ width: `${Math.min(100, Math.max(0, value))}%` }} /></div>; }
 function Counter({ color, value, label }: { color: string; value: number; label: string }) { return <div className={`counter ${color}`}><strong>{value}</strong><span>{label}</span></div>; }
 
@@ -114,22 +123,24 @@ function TeamWizard({ team, colleges, back, saved }: { team?: Team; colleges: Co
   const [step, setStep] = useState(1), [name, setName] = useState(team?.name ?? ""), [leader, setLeader] = useState(team?.leader ?? ""), [target, setTarget] = useState(String(team?.target ?? 50)), [members, setMembers] = useState(team?.members.join(", ") ?? ""), [username, setUsername] = useState(team?.username ?? ""), [password, setPassword] = useState(""), [selected, setSelected] = useState<string[]>(team?.colleges.map(c => c.id) ?? []), [newCollege, setNewCollege] = useState(""), [savedId, setSavedId] = useState(team?.id ?? ""), [busy, setBusy] = useState(false), [error, setError] = useState("");
   const available = colleges.filter(c => !c.team_id || c.team_id === savedId || c.team_id === team?.id);
   const next = () => { setError(""); if (step === 1 && (!name.trim() || !leader.trim() || !Number.isInteger(Number(target)) || Number(target) < 1)) { setError("Enter a team name, leader name, and positive whole-number target."); return; } if (step === 2 && !team?.leaderId && (!/^[a-z0-9_.-]{3,32}$/.test(username.trim().toLowerCase()) || password.length < 12)) { setError("Use a 3–32 character username and a password of at least 12 characters."); return; } setStep(step + 1); };
-  const save = async () => { setBusy(true); setError(""); try {
+  const save = async () => { if (busy) return; setBusy(true); setError(""); let currentId = savedId; let phase = "team"; try {
     const details = { name: name.trim(), leader_name: leader.trim(), member_names: members.split(",").map(s => s.trim()).filter(Boolean), target: Number(target) };
-    let id = savedId;
+    let id = currentId;
     if (id) { const r = await supabase.from("teams").update(details).eq("id", id).select("id").single(); if (r.error) throw r.error; }
-    else { const r = await supabase.from("teams").insert(details).select("id").single(); if (r.error) throw r.error; id = r.data.id as string; setSavedId(id); }
+    else { const r = await supabase.from("teams").insert(details).select("id").single(); if (r.error) throw r.error; id = r.data.id as string; currentId = id; setSavedId(id); }
+    phase = "colleges";
     for (const c of colleges) { if (selected.includes(c.id) && c.team_id !== id) { const r = await supabase.from("colleges").update({ team_id: id }).eq("id", c.id); if (r.error) throw r.error; } if (!selected.includes(c.id) && c.team_id === id) { const r = await supabase.from("colleges").update({ team_id: null }).eq("id", c.id); if (r.error) throw r.error; } }
     for (const collegeName of newCollege.split(",").map(s => s.trim()).filter(Boolean)) { const r = await supabase.from("colleges").insert({ name: collegeName, team_id: id }); if (r.error) throw r.error; } setNewCollege("");
-    if (!team?.leaderId) { const r = await supabase.functions.invoke("admin-leaders", { body: { action: "create_leader", team_id: id, username: username.trim().toLowerCase(), display_name: leader.trim(), password } }); if (r.error || !r.data?.ok) throw new Error(r.data?.error ?? r.error?.message ?? "Could not create the leader account."); }
-    else if (password) { const r = await supabase.functions.invoke("admin-leaders", { body: { action: "reset_password", team_id: id, password } }); if (r.error || !r.data?.ok) throw new Error(r.data?.error ?? r.error?.message ?? "Could not reset the leader password."); }
+    phase = "leader";
+    if (!team?.leaderId) { const r = await supabase.functions.invoke("admin-leaders", { body: { action: "create_leader", team_id: id, username: username.trim().toLowerCase(), display_name: leader.trim(), password } }); if (r.error) throw new Error(await edgeErrorText(r.error)); if (!r.data?.ok) throw new Error(r.data?.error ?? "Could not create the leader account."); }
+    else if (password) { const r = await supabase.functions.invoke("admin-leaders", { body: { action: "reset_password", team_id: id, password } }); if (r.error) throw new Error(await edgeErrorText(r.error)); if (!r.data?.ok) throw new Error(r.data?.error ?? "Could not reset the leader password."); }
     await saved(id);
-  } catch (e) { setError(`${errText(e)} Team details may already have been saved; you can retry.`); } finally { setBusy(false); } };
+  } catch (e) { const savedHint = currentId ? phase === "leader" ? "Team and colleges are saved. Retry to finish leader setup." : "Team details are saved. Retry to finish setup." : ""; setError([errText(e), savedHint].filter(Boolean).join(" ")); } finally { setBusy(false); } };
   return <section className="page form-page"><button className="back" onClick={step > 1 ? () => setStep(step - 1) : back}><ArrowLeft size={20} /></button><p className="eyebrow">{team ? "EDIT TEAM" : "NEW TEAM"} · STEP {step} OF 3</p><h1>{["Team details", "People & access", "Assign colleges"][step - 1]}</h1><div className="steps">{[1, 2, 3].map(n => <i className={n <= step ? "done" : ""} key={n} />)}</div>
     {step === 1 && <><label className="field">Team name<input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Team Daisy" maxLength={120} /></label><label className="field">Leader name<input value={leader} onChange={e => setLeader(e.target.value)} placeholder="Full name" maxLength={120} disabled={Boolean(team?.leaderId)} /></label><label className="field">Registration target<input type="number" min={1} step={1} value={target} onChange={e => setTarget(e.target.value)} /></label></>}
     {step === 2 && <><label className="field">Leader username<input value={username} onChange={e => setUsername(e.target.value)} placeholder="username" disabled={Boolean(team?.leaderId)} autoComplete="off" /></label><label className="field">{team?.leaderId ? "New password (optional)" : "Temporary password"}<input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="At least 12 characters" autoComplete="new-password" /></label><p className="hint">Share credentials with the leader privately. Admins can reset passwords later.</p><label className="field">Team members (optional, comma separated)<input value={members} onChange={e => setMembers(e.target.value)} placeholder="Member names" /></label></>}
     {step === 3 && <><div className="assignment"><Building2 /><div><h3>Choose colleges</h3><p>Each college can belong to one team only.</p></div></div>{available.map(c => <label className="check" key={c.id}><input type="checkbox" checked={selected.includes(c.id)} onChange={e => setSelected(e.target.checked ? [...selected, c.id] : selected.filter(id => id !== c.id))} />{c.name}</label>)}{!available.length && <p className="hint">No unassigned colleges yet. Add one below.</p>}<label className="field">Add new colleges (comma separated)<input value={newCollege} onChange={e => setNewCollege(e.target.value)} placeholder="e.g. Riverdale College" /></label></>}
-    {error && <p className="form-error" role="alert">{error}</p>}<button className="primary bottom-action" disabled={busy} onClick={step < 3 ? next : () => void save()}>{busy ? "Saving…" : step < 3 ? "Continue" : team ? "Save team" : "Create team"}<ChevronRight size={18} /></button></section>;
+    {error && <p className="form-error" role="alert">{error}</p>}<button className="primary bottom-action" disabled={busy} onClick={step < 3 ? next : () => void save()}>{busy ? "Saving…" : step < 3 ? "Continue" : team?.leaderId ? "Save team" : savedId ? "Finish team setup" : "Create team"}<ChevronRight size={18} /></button></section>;
 }
 
 function CollegesPage({ admin, team, teams, colleges, back, refresh }: { admin: boolean; team?: Team; teams: Team[]; colleges: College[]; back: () => void; refresh: () => Promise<void> }) {
