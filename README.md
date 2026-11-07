@@ -15,7 +15,8 @@ npm run dev
 
 ## Roles and data
 
-- Administrators create and edit teams, leader accounts, targets, and college assignments. Counts are read-only to admins.
+- Administrators create, edit, and delete teams, leader accounts, targets, and college assignments. Counts are read-only to admins.
+- Deleting a team removes its leader login and counts and leaves its colleges unassigned. The app shows a new leader password once after creation or reset; existing passwords cannot be retrieved.
 - A leader can view their own team and colleges and update only their own team's Interested, Registered unpaid, and Confirmed paid totals.
 - Each college has one nullable team assignment. Saved changes update other signed-in screens through Supabase Realtime.
 - A five-stage vector plant grows with confirmed progress and blooms at 100%.

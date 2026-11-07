@@ -53,7 +53,33 @@ Deno.serve(async (request) => {
     console.error("Team lookup failed", teamError.code, teamError.message);
     return respond({ error: "Could not check the team. Try again." }, 500, origin);
   }
-  if (!team) return respond({ error: "Team not found" }, 404, origin);
+  if (!team) return input.action === "delete_team"
+    ? respond({ ok: true }, 200, origin)
+    : respond({ error: "Team not found" }, 404, origin);
+
+  if (input.action === "delete_team") {
+    if (team.leader_user_id) {
+      const { data: leaderProfile, error: leaderProfileError } = await admin
+        .from("profiles").select("role").eq("user_id", team.leader_user_id).maybeSingle();
+      if (leaderProfileError) {
+        console.error("Leader lookup failed", leaderProfileError.code, leaderProfileError.message);
+        return respond({ error: "Could not check the leader login. Try again." }, 500, origin);
+      }
+      if (leaderProfile?.role !== "leader")
+        return respond({ error: "This team's login needs review before deletion." }, 409, origin);
+      const { error: userDeleteError } = await admin.auth.admin.deleteUser(team.leader_user_id);
+      if (userDeleteError) {
+        console.error("Leader deletion failed", userDeleteError.message);
+        return respond({ error: "Could not remove the leader login. Try again." }, 500, origin);
+      }
+    }
+    const { error: deleteError } = await admin.from("teams").delete().eq("id", teamId);
+    if (deleteError) {
+      console.error("Team deletion failed", deleteError.code, deleteError.message);
+      return respond({ error: "Could not remove the team. Try again." }, 500, origin);
+    }
+    return respond({ ok: true }, 200, origin);
+  }
 
   if (input.action === "reset_password") {
     const password = input.password;
