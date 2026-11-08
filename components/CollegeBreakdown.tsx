@@ -16,7 +16,7 @@ function Totals({ counts }: { counts: Counts }) {
 export function CollegeBreakdown({ colleges, unallocated, onAllocate }: { colleges: CollegeTotal[]; unallocated: Counts; onAllocate?: () => void }) {
   const hasUnallocated = Object.values(unallocated).some(value => value > 0);
   return <section className="college-breakdown" aria-label="College totals">
-    <div className="college-breakdown-heading"><Building2 size={18} /><h2>College totals</h2>{colleges.length > 0 && <span className="college-breakdown-count" aria-label={`${colleges.length} colleges`}>{colleges.length}</span>}</div>
+    <div className="college-breakdown-heading"><Building2 size={18} /><h2>College totals</h2>{colleges.length > 0 && <span className="college-breakdown-count" aria-label={`${colleges.length} ${colleges.length === 1 ? "college" : "colleges"}`}>{colleges.length}</span>}</div>
     <p className="college-breakdown-intro">Every college’s contribution, at a glance.</p>
     {colleges.length ? colleges.map(college => <div className="college-totals-row" key={college.id}>
       <div className="college-totals-name"><strong>{college.name}</strong>{!college.assigned && <span>Previously assigned</span>}</div>

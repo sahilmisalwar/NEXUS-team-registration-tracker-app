@@ -4,6 +4,8 @@ import "./polish.css";
 import "./refinement.css";
 import "./detail-refinement.css";
 import "./plant-refinement.css";
+import "./history-refinement.css";
+import "./workflow-refinement.css";
 
 export const metadata: Metadata = {
   title: "NEXUS Progress Tracker",
