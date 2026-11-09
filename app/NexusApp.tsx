@@ -10,6 +10,7 @@ import { CollegeBreakdown, type CollegeTotal } from "@/components/CollegeBreakdo
 import { EntryCard, EntriesPage, type CountEntry } from "@/components/EntryHistory";
 import { TeamDetail } from "@/components/TeamDetail";
 import { UpdateSheet, type Counts } from "@/components/UpdateEntriesSheet";
+import { mergeEntryHistory, olderEntriesFilter } from "@/lib/entry-history";
 import { authLinkType, supabase } from "@/lib/supabase";
 
 type Profile = { user_id: string; username: string; display_name: string; role: "admin" | "leader" };
@@ -62,13 +63,23 @@ export default function NexusApp() {
   const [plantMessage, setPlantMessage] = useState<PlantMessage | null>(null);
   const [credentials, setCredentials] = useState<LeaderCredentials | null>(null);
   const [needsPassword, setNeedsPassword] = useState(() => authLinkType === "invite" || authLinkType === "recovery");
+  const activeUser = useRef<string | null>(null);
+  const authVersion = useRef(0);
+  const historyExpanded = useRef(false);
+  const reloadVersion = useRef(0);
+  const savingEntry = useRef(false);
+  const pageRoot = useRef<HTMLElement>(null);
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const flash = (s: string) => { if (noticeTimer.current) clearTimeout(noticeTimer.current); setNotice(s); noticeTimer.current = setTimeout(() => setNotice(""), 4000); };
   useEffect(() => () => { if (noticeTimer.current) clearTimeout(noticeTimer.current); }, []);
-  useEffect(() => { window.scrollTo({ top: 0, behavior: "instant" }); }, [screen]);
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "instant" });
+    const heading = pageRoot.current?.querySelector<HTMLElement>(".page h1");
+    if (heading) { heading.tabIndex = -1; heading.focus({ preventScroll: true }); }
+  }, [screen]);
 
   const reload = useCallback(async (userId: string, quiet = false) => {
-    if (!quiet) setBusy(true);
+    const request = ++reloadVersion.current;
     try {
       const [p, t, c, n, e, cc] = await Promise.all([
         supabase.from("profiles").select("user_id,username,display_name,role"),
@@ -78,6 +89,7 @@ export default function NexusApp() {
         supabase.from("count_entries").select(entryColumns).order("created_at", { ascending: false }).order("id", { ascending: false }).limit(entryPageSize),
         supabase.from("college_counts").select("team_id,college_id,interested,registered_unpaid,confirmed_paid"),
       ]);
+      if (activeUser.current !== userId || request !== reloadVersion.current) return;
       for (const r of [p, t, c, n, e, cc]) if (r.error) throw r.error;
       const profiles = (p.data ?? []) as Profile[];
       const mine = profiles.find(x => x.user_id === userId);
@@ -101,17 +113,34 @@ export default function NexusApp() {
         const unallocated = { interested: Math.max(0, counts.interested - tracked.interested), registered: Math.max(0, counts.registered - tracked.registered), confirmed: Math.max(0, counts.confirmed - tracked.confirmed) };
         return { id: row.id, name: row.name, leader: row.leader_name, leaderId: row.leader_user_id, username: profiles.find(x => x.user_id === row.leader_user_id)?.username ?? "", members: row.member_names ?? [], target: row.target, colleges: assigned, collegeTotals, unallocated, counts, updated: count?.updated_at ?? null } as Team;
       });
-      setProfile(mine); setTeams(mapped); setColleges(cs); setEntries((e.data ?? []) as CountEntry[]); setHasOlderEntries((e.data ?? []).length === entryPageSize); setError(""); setScreen(x => x === "login" ? mine.role : x);
-    } catch (e) { setError(errText(e)); }
-    finally { if (!quiet) setBusy(false); }
+      setProfile(mine); setTeams(mapped); setColleges(cs); setEntries(current => quiet && historyExpanded.current && (e.data ?? []).length === entryPageSize ? mergeEntryHistory(current, (e.data ?? []) as CountEntry[], mapped.map(item => item.id)) : (e.data ?? []) as CountEntry[]);
+      if (!quiet || !historyExpanded.current || (e.data ?? []).length < entryPageSize) { historyExpanded.current = false; setHasOlderEntries((e.data ?? []).length === entryPageSize); } setError(""); setScreen(x => x === "login" ? mine.role : x);
+    } catch (e) { if (activeUser.current === userId && request === reloadVersion.current) setError(errText(e)); }
   }, []);
   useEffect(() => {
     let live = true;
-    supabase.auth.getSession().then(({ data, error: e }) => { if (live) { if (e) setError(e.message); setSession(data.session); setReady(true); } });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, current) => {
-      if (event === "PASSWORD_RECOVERY") setNeedsPassword(true);
+    const applySession = (current: Session | null) => {
+      if (!live) return;
+      const userId = current?.user.id ?? null;
+      if (userId !== activeUser.current) {
+        activeUser.current = userId; authVersion.current += 1; reloadVersion.current += 1; historyExpanded.current = false; savingEntry.current = false;
+        setProfile(null); setTeams([]); setColleges([]); setEntries([]); setHasOlderEntries(false); setLoadingOlderEntries(false);
+        setCredentials(null); setPlantMotion(null); setPlantMessage(null); setSheet(false); setDraft(empty()); setBaseCounts(empty());
+        setEntryCollegeId(""); setEntryNote(""); setEntryError(""); setEntryMode("update"); setSelected(null); setEditing(null);
+        setBusy(false); setError(""); setNotice(""); setScreen("login");
+        if (noticeTimer.current) clearTimeout(noticeTimer.current);
+        if (!current) setNeedsPassword(false);
+      }
       setSession(current); setReady(true);
-      if (!current) { setProfile(null); setTeams([]); setColleges([]); setEntries([]); setHasOlderEntries(false); setCredentials(null); setPlantMotion(null); setPlantMessage(null); setScreen("login"); }
+    };
+    let authEventReceived = false;
+    supabase.auth.getSession().then(({ data, error: e }) => {
+      if (live && !authEventReceived) { applySession(data.session); if (e) setError(e.message); }
+    }).catch(e => { if (live && !authEventReceived) { setError(errText(e)); setReady(true); } });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, current) => {
+      authEventReceived = true;
+      applySession(current);
+      if (event === "PASSWORD_RECOVERY") setNeedsPassword(true);
     });
     return () => { live = false; subscription.unsubscribe(); };
   }, []);
@@ -138,27 +167,38 @@ export default function NexusApp() {
   const role = profile?.role;
   const team = role === "leader" ? teams.find(t => t.leaderId === session?.user.id) : teams.find(t => t.id === selected) ?? teams[0];
   const selectedTeam = teams.find(t => t.id === selected);
+  const sessionGeneration = authVersion.current;
+  const isCurrentSession = () => activeUser.current === session?.user.id && authVersion.current === sessionGeneration;
+  const logout = async () => {
+    try { const result = await supabase.auth.signOut(); if (result.error) throw result.error; }
+    catch (e) { if (isCurrentSession()) setError(errText(e)); }
+  };
   const home = () => setScreen(role === "admin" ? "admin" : "leader");
   const saveCounts = async () => {
-    if (!team || role !== "leader" || busy) return;
+    if (!team || role !== "leader" || busy || savingEntry.current) return;
     if (!team.colleges.some(c => c.id === entryCollegeId)) { setEntryError("Choose one of your assigned colleges."); return; }
-    const previousPercent = percent(team);
     const nextCounts = { ...draft };
     const delta = { interested: nextCounts.interested - baseCounts.interested, registered: nextCounts.registered - baseCounts.registered, confirmed: nextCounts.confirmed - baseCounts.confirmed };
     if (entryMode === "allocation") {
       if (Object.values(delta).some(value => value < 0) || Object.values(delta).every(value => value === 0)) { setEntryError("Add at least one earlier count to this college."); return; }
       if (delta.interested > team.unallocated.interested || delta.registered > team.unallocated.registered || delta.confirmed > team.unallocated.confirmed) { setEntryError("The amounts exceed the earlier totals awaiting a college."); return; }
     } else if (Object.values(delta).every(value => value === 0) && !entryNote.trim()) { setEntryError("Change a college count or add a note before saving."); return; }
-    const nextTeamCounts = entryMode === "allocation" ? team.counts : { interested: team.counts.interested + delta.interested, registered: team.counts.registered + delta.registered, confirmed: team.counts.confirmed + delta.confirmed };
-    setBusy(true); setEntryError("");
-    const r = await supabase.from("count_entries").insert({ team_id: team.id, college_id: entryCollegeId, note: entryNote.trim(), entry_kind: entryMode, college_interested: nextCounts.interested, college_registered_unpaid: nextCounts.registered, college_confirmed_paid: nextCounts.confirmed, previous_college_interested: baseCounts.interested, previous_college_registered_unpaid: baseCounts.registered, previous_college_confirmed_paid: baseCounts.confirmed }).select("id").single();
-    setBusy(false);
-    if (r.error) { setEntryError(r.error.message); return; }
-    setTeams(current => current.map(item => item.id === team.id ? { ...item, counts: nextTeamCounts, collegeTotals: item.collegeTotals.map(college => college.id === entryCollegeId ? { ...college, counts: nextCounts } : college), unallocated: entryMode === "allocation" ? { interested: item.unallocated.interested - delta.interested, registered: item.unallocated.registered - delta.registered, confirmed: item.unallocated.confirmed - delta.confirmed } : item.unallocated, updated: new Date().toISOString() } : item));
+    const userId = session?.user.id;
+    const authRequest = authVersion.current;
+    savingEntry.current = true; setBusy(true); setEntryError("");
+    try {
+    const r = await supabase.from("count_entries").insert({ team_id: team.id, college_id: entryCollegeId, note: entryNote.trim(), entry_kind: entryMode, college_interested: nextCounts.interested, college_registered_unpaid: nextCounts.registered, college_confirmed_paid: nextCounts.confirmed, previous_college_interested: baseCounts.interested, previous_college_registered_unpaid: baseCounts.registered, previous_college_confirmed_paid: baseCounts.confirmed }).select("id,interested,registered_unpaid,confirmed_paid,previous_confirmed_paid,created_at").single();
+    if (activeUser.current !== userId || authVersion.current !== authRequest) return;
+    if (r.error) throw r.error;
+    const nextTeamCounts = { interested: r.data.interested as number, registered: r.data.registered_unpaid as number, confirmed: r.data.confirmed_paid as number };
+    const previousPercent = team.target ? r.data.previous_confirmed_paid / team.target * 100 : 0;
+    setTeams(current => current.map(item => item.id === team.id ? { ...item, counts: nextTeamCounts, collegeTotals: item.collegeTotals.map(college => college.id === entryCollegeId ? { ...college, counts: nextCounts } : college), unallocated: entryMode === "allocation" ? { interested: item.unallocated.interested - delta.interested, registered: item.unallocated.registered - delta.registered, confirmed: item.unallocated.confirmed - delta.confirmed } : item.unallocated, updated: r.data.created_at } : item));
     setSheet(false); setScreen("leader");
     setPlantMotion(current => ({ kind: entryMode === "update" && delta.confirmed > 0 ? "grow" : "nudge", fromPercent: previousPercent, id: (current?.id ?? 0) + 1 }));
     setPlantMessage(current => ({ text: entryMode === "allocation" ? "Earlier totals assigned to your college. Nicely done!" : savedEntryMessage(nextTeamCounts.confirmed, team.target, delta.confirmed > 0), id: (current?.id ?? 0) + 1 }));
     flash(entryMode === "allocation" ? "Earlier totals assigned" : "Entry saved"); if (session) void reload(session.user.id, true);
+    } catch (e) { if (activeUser.current === userId && authVersion.current === authRequest) setEntryError(errText(e)); }
+    finally { if (activeUser.current === userId && authVersion.current === authRequest) { savingEntry.current = false; setBusy(false); } }
   };
   const openUpdate = (mode: EntryMode = "update") => { if (team && role === "leader") { setEntryMode(mode); setDraft(empty()); setBaseCounts(empty()); setEntryCollegeId(""); setEntryNote(""); setEntryError(""); setSheet(true); } };
   const chooseEntryCollege = (id: string) => {
@@ -169,42 +209,66 @@ export default function NexusApp() {
   const loadOlderEntries = async () => {
     const oldest = entries.at(-1);
     if (!oldest || !hasOlderEntries || loadingOlderEntries) return;
+    const userId = activeUser.current;
+    const authRequest = authVersion.current;
     setLoadingOlderEntries(true);
-    const r = await supabase.from("count_entries").select(entryColumns).lt("created_at", oldest.created_at).order("created_at", { ascending: false }).order("id", { ascending: false }).limit(entryPageSize);
-    setLoadingOlderEntries(false);
-    if (r.error) { setError(r.error.message); return; }
-    const older = (r.data ?? []) as CountEntry[];
-    setEntries(current => [...current, ...older.filter(entry => !current.some(saved => saved.id === entry.id))]);
-    setHasOlderEntries(older.length === entryPageSize);
+    try {
+      const r = await supabase.from("count_entries").select(entryColumns).or(olderEntriesFilter(oldest)).order("created_at", { ascending: false }).order("id", { ascending: false }).limit(entryPageSize);
+      if (activeUser.current !== userId || authVersion.current !== authRequest) return;
+      if (r.error) throw r.error;
+      const older = (r.data ?? []) as CountEntry[];
+      historyExpanded.current = true;
+      setEntries(current => mergeEntryHistory(current, older, teams.map(item => item.id)));
+      setHasOlderEntries(older.length === entryPageSize);
+    } catch (e) { if (activeUser.current === userId && authVersion.current === authRequest) setError(errText(e)); }
+    finally { if (activeUser.current === userId && authVersion.current === authRequest) setLoadingOlderEntries(false); }
   };
 
   if (!ready || (session && !profile && !error)) return <main className="login-page"><section className="login-card"><div className="login-plant"><Plant percent={65} /></div><h1>NEXUS</h1><p className="sub loading-welcome" role="status"><span />Getting your progress ready…</p></section></main>;
   if (!session) return <Login error={error} onError={setError} />;
   if (needsPassword) return <PasswordSetup done={() => { setNeedsPassword(false); flash("Password saved"); }} />;
-  if (!profile) return <main className="login-page"><section className="login-card"><h1>NEXUS</h1><p className="sub">{error || "Account access is being prepared."}</p><button className="primary" onClick={() => void supabase.auth.signOut()}>Sign out</button></section></main>;
-  return <main className="app-shell"><header className="topbar"><button className="brand" onClick={home}><b className="brand-emblem"><Image src="/nexus-team-emblem.png" alt="" width={31} height={31} /></b><span>NEXUS<small>PROGRESS TRACKER</small></span></button><button className="avatar" aria-label="Open your profile" onClick={() => setScreen("profile")}>{profile.display_name.slice(0, 2).toUpperCase()}</button></header>
-    {notice && <div className="toast" role="status">✓ {notice}</div>}{error && <div className="app-error" role="alert">{error}<button onClick={() => setError("")}>Dismiss</button></div>}{busy && <p className="loading-note">Updating your plant…</p>}
+  if (!profile) return <main className="login-page"><section className="login-card"><h1>NEXUS</h1><p className="sub" role="alert">{error || "Account access is being prepared."}</p><button className="primary" onClick={() => { setError(""); void reload(session.user.id); }}>Try loading again</button><button className="secondary-action" onClick={() => void logout()}>Sign out</button></section></main>;
+  return <main ref={pageRoot} className="app-shell"><header className="topbar"><button className="brand" onClick={home}><b className="brand-emblem"><Image src="/nexus-team-emblem.png" alt="" width={31} height={31} /></b><span>NEXUS<small>PROGRESS TRACKER</small></span></button><button className="avatar" aria-label="Open your profile" onClick={() => setScreen("profile")}>{profile.display_name.slice(0, 2).toUpperCase()}</button></header>
+    {notice && <div className="toast" role="status">✓ {notice}</div>}{error && <div className="app-error" role="alert">{error}<button onClick={() => setError("")}>Dismiss</button></div>}{busy && <p className="loading-note" role="status">Updating your plant…</p>}
     {screen === "admin" && <AdminDashboard teams={teams} entries={entries} manage={() => setScreen("teams")} view={id => { setSelected(id); setScreen("team-detail"); }} history={() => setScreen("entries")} create={() => { setEditing(null); setScreen("team-form"); }} />}
     {screen === "leader" && (team ? <LeaderDashboard team={team} name={profile.display_name} motion={plantMotion} message={plantMessage} tapPlant={tapPlant} update={() => openUpdate()} allocate={() => openUpdate("allocation")} colleges={() => setScreen("colleges")} history={() => setScreen("entries")} /> : <section className="page empty-state"><Plant percent={0} /><h1>Your team is being prepared.</h1><p>Ask your administrator to assign your account to a team.</p></section>)}
     {screen === "teams" && <TeamsPage teams={teams} create={() => { setEditing(null); setScreen("team-form"); }} view={id => { setSelected(id); setScreen("team-detail"); }} />}
     {screen === "team-detail" && (selectedTeam ? <TeamDetail team={selectedTeam} back={() => setScreen("teams")} edit={() => { setEditing(selectedTeam.id); setScreen("team-form"); }} /> : <section className="page empty-state"><h1>Team unavailable</h1><p>This team may have been removed.</p><button className="primary" onClick={() => setScreen("teams")}>Back to teams</button></section>)}
-    {screen === "team-form" && <TeamWizard key={editing ?? "new"} team={teams.find(t => t.id === editing)} colleges={colleges} back={() => setScreen(editing ? "team-detail" : "teams")} saved={async (id, login) => { setSelected(id); if (session) await reload(session.user.id); setScreen(editing ? "team-detail" : "teams"); if (login) setCredentials(login); else flash(editing ? "Team updated" : "Team created"); }} deleted={async () => { setSelected(null); setEditing(null); if (session) await reload(session.user.id); setScreen("teams"); flash("Team deleted"); }} />}
-    {screen === "colleges" && <CollegesPage admin={role === "admin"} team={team} teams={teams} colleges={colleges} back={home} onNotice={flash} refresh={() => session ? reload(session.user.id, true) : Promise.resolve()} />}
+    {screen === "team-form" && <TeamWizard key={editing ?? "new"} team={teams.find(t => t.id === editing)} colleges={colleges} back={() => setScreen(editing ? "team-detail" : "teams")} saved={async (id, login) => { if (!isCurrentSession()) return; if (session) await reload(session.user.id); if (!isCurrentSession()) return; setSelected(id); setScreen(editing ? "team-detail" : "teams"); if (login) setCredentials(login); else flash(editing ? "Team updated" : "Team created"); }} deleted={async () => { if (!isCurrentSession()) return; if (session) await reload(session.user.id); if (!isCurrentSession()) return; setSelected(null); setEditing(null); setScreen("teams"); flash("Team deleted"); }} />}
+    {screen === "colleges" && <CollegesPage admin={role === "admin"} team={team} teams={teams} colleges={colleges} back={home} onNotice={message => { if (isCurrentSession()) flash(message); }} refresh={() => session ? reload(session.user.id, true) : Promise.resolve()} />}
     {screen === "entries" && <EntriesPage admin={role === "admin"} entries={entries} teams={teams} hasOlder={hasOlderEntries} loadingOlder={loadingOlderEntries} loadOlder={() => void loadOlderEntries()} />}
-    {screen === "profile" && <ProfilePage profile={profile} team={team} logout={() => void supabase.auth.signOut()} />}
+    {screen === "profile" && <ProfilePage profile={profile} team={team} logout={() => void logout()} />}
     <nav className="bottom-nav" aria-label="Main navigation"><button aria-current={screen === "admin" || screen === "leader" ? "page" : undefined} className={screen === "admin" || screen === "leader" ? "active" : ""} onClick={home}><Home size={20} /><span>Home</span></button>{role === "admin" ? <><button aria-current={["teams", "team-detail", "team-form"].includes(screen) ? "page" : undefined} className={screen === "teams" || screen === "team-detail" || screen === "team-form" ? "active" : ""} onClick={() => setScreen("teams")}><Users size={20} /><span>Teams</span></button><button aria-current={screen === "colleges" ? "page" : undefined} className={screen === "colleges" ? "active" : ""} onClick={() => setScreen("colleges")}><Building2 size={20} /><span>Colleges</span></button></> : <button onClick={() => openUpdate()}><Edit3 size={20} /><span>Update</span></button>}<button aria-current={screen === "entries" ? "page" : undefined} className={screen === "entries" ? "active" : ""} onClick={() => setScreen("entries")}><FileText size={20} /><span>Entries</span></button><button aria-current={screen === "profile" ? "page" : undefined} className={screen === "profile" ? "active" : ""} onClick={() => setScreen("profile")}><UserRound size={20} /><span>Profile</span></button></nav>
-    {sheet && team && <UpdateSheet team={team} mode={entryMode} draft={draft} setDraft={setDraft} collegeId={entryCollegeId} setCollegeId={chooseEntryCollege} note={entryNote} setNote={setEntryNote} error={entryError} close={() => { if (!busy) setSheet(false); }} save={() => void saveCounts()} busy={busy} />}
+    {sheet && role === "leader" && team && <UpdateSheet team={team} mode={entryMode} draft={draft} setDraft={setDraft} collegeId={entryCollegeId} setCollegeId={chooseEntryCollege} note={entryNote} setNote={setEntryNote} error={entryError} close={() => { if (!busy) setSheet(false); }} save={() => void saveCounts()} busy={busy} />}
     {credentials && <CredentialsSheet credentials={credentials} close={() => setCredentials(null)} />}
   </main>;
 }
 
 function Login({ error, onError }: { error: string; onError: (s: string) => void }) {
   const [identifier, setIdentifier] = useState(""), [password, setPassword] = useState(""), [sending, setSending] = useState(false), [info, setInfo] = useState("");
-  const signIn = async (event: React.FormEvent) => { event.preventDefault(); onError(""); setSending(true); const value = identifier.trim().toLowerCase(); const email = value.includes("@") ? value : `${value}@leaders.nexus-tracker.example`; const r = await supabase.auth.signInWithPassword({ email, password }); if (r.error) onError("Sign in failed. Check your username or email and password."); setSending(false); };
-  const sendSetup = async () => { if (!identifier.trim().includes("@")) { onError("Enter your administrator email to get a setup link."); return; } setSending(true); onError(""); const r = await supabase.auth.resetPasswordForEmail(identifier.trim(), { redirectTo: window.location.origin }); setSending(false); if (r.error) onError(r.error.message); else setInfo("If this email belongs to an administrator, a setup link is on its way."); };
-  return <main className="login-page"><i className="sprig a">❋</i><i className="sprig b">❋</i><section className="login-card"><Image className="login-emblem login-emblem-left" src="/nexus-team-emblem.png" alt="" width={38} height={38} /><Image className="login-emblem login-emblem-nit" src="/nit-shield-crest.png" alt="Nagpur Institute of Technology crest" width={48} height={32} /><div className="login-plant"><Plant percent={65} /></div><p className="eyebrow">WELCOME TO</p><h1>NEXUS</h1><p className="sub">Progress grows one step at a time.</p><div className="login-divider"><span>YOUR NEXT MILESTONE STARTS HERE</span></div><form onSubmit={signIn}><label>Email or leader username<input autoComplete="username" value={identifier} onChange={e => setIdentifier(e.target.value)} placeholder="you@example.com or username" autoCapitalize="none" spellCheck={false} required /></label><PasswordField label="Password" value={password} onChange={setPassword} placeholder="Your password" autoComplete="current-password" required />{error && <p className="form-error" role="alert">{error}</p>}{info && <p className="form-info">{info}</p>}<button className="primary" disabled={sending} type="submit">{sending ? "Please wait…" : "Sign in"}<ChevronRight size={18} /></button></form><button className="role-switch" type="button" onClick={() => void sendSetup()} disabled={sending}>Admin: set or reset your password</button></section></main>;
+  const signIn = async (event: React.FormEvent) => {
+    event.preventDefault(); if (sending) return; onError(""); setInfo(""); setSending(true);
+    try {
+      const value = identifier.trim().toLowerCase();
+      const email = value.includes("@") ? value : `${value}@leaders.nexus-tracker.example`;
+      const r = await supabase.auth.signInWithPassword({ email, password });
+      if (r.error) onError("Sign in failed. Check your username or email and password.");
+    } catch { onError("Could not connect. Check your connection and try again."); }
+    finally { setSending(false); }
+  };
+  const sendSetup = async () => {
+    if (sending) return;
+    if (!identifier.trim().includes("@")) { onError("Enter your administrator email to get a setup link."); return; }
+    setSending(true); onError(""); setInfo("");
+    try {
+      const r = await supabase.auth.resetPasswordForEmail(identifier.trim(), { redirectTo: window.location.origin });
+      if (r.error) onError(r.error.message); else setInfo("If this email belongs to an administrator, a setup link is on its way.");
+    } catch { onError("Could not connect. Check your connection and try again."); }
+    finally { setSending(false); }
+  };
+  return <main className="login-page"><i className="sprig a">❋</i><i className="sprig b">❋</i><section className="login-card"><Image className="login-emblem login-emblem-left" src="/nexus-team-emblem.png" alt="" width={38} height={38} /><Image className="login-emblem login-emblem-nit" src="/nit-shield-crest.png" alt="Nagpur Institute of Technology crest" width={48} height={32} /><div className="login-plant"><Plant percent={65} /></div><p className="eyebrow">WELCOME TO</p><h1>NEXUS</h1><p className="sub">Progress grows one step at a time.</p><div className="login-divider"><span>YOUR NEXT MILESTONE STARTS HERE</span></div><form onSubmit={signIn}><label>Email or leader username<input autoComplete="username" value={identifier} onChange={e => setIdentifier(e.target.value)} placeholder="you@example.com or username" autoCapitalize="none" spellCheck={false} required /></label><PasswordField label="Password" value={password} onChange={setPassword} placeholder="Your password" autoComplete="current-password" required />{error && <p className="form-error" role="alert">{error}</p>}{info && <p className="form-info" role="status">{info}</p>}<button className="primary" disabled={sending} type="submit">{sending ? "Please wait…" : "Sign in"}<ChevronRight size={18} /></button></form><button className="role-switch" type="button" onClick={() => void sendSetup()} disabled={sending}>Admin: set or reset your password</button></section></main>;
 }
-function PasswordSetup({ done }: { done: () => void }) { const [password, setPassword] = useState(""), [error, setError] = useState(""), [busy, setBusy] = useState(false); const save = async (event: React.FormEvent) => { event.preventDefault(); if (password.length < 12) { setError("Use at least 12 characters."); return; } setBusy(true); const r = await supabase.auth.updateUser({ password }); setBusy(false); if (r.error) setError(r.error.message); else done(); }; return <main className="login-page"><section className="login-card"><Image className="login-emblem" src="/nexus-team-emblem.png" alt="" width={38} height={38} /><div className="login-plant"><Plant percent={100} /></div><h1>Welcome to NEXUS</h1><p className="sub">Choose your password to finish setting up your account.</p><form onSubmit={save}><PasswordField label="New password" value={password} onChange={setPassword} autoComplete="new-password" minLength={12} required />{error && <p className="form-error" role="alert">{error}</p>}<button className="primary" disabled={busy}>Save password<ChevronRight size={18} /></button></form></section></main>; }
+function PasswordSetup({ done }: { done: () => void }) { const [password, setPassword] = useState(""), [error, setError] = useState(""), [busy, setBusy] = useState(false); const save = async (event: React.FormEvent) => { event.preventDefault(); if (password.length < 12) { setError("Use at least 12 characters."); return; } if (busy) return; setBusy(true); setError(""); try { const r = await supabase.auth.updateUser({ password }); if (r.error) setError(r.error.message); else done(); } catch { setError("Could not connect. Check your connection and try again."); } finally { setBusy(false); } }; return <main className="login-page"><section className="login-card"><Image className="login-emblem" src="/nexus-team-emblem.png" alt="" width={38} height={38} /><div className="login-plant"><Plant percent={100} /></div><h1>Welcome to NEXUS</h1><p className="sub">Choose your password to finish setting up your account.</p><form onSubmit={save}><PasswordField label="New password" value={password} onChange={setPassword} autoComplete="new-password" minLength={12} required />{error && <p className="form-error" role="alert">{error}</p>}<button className="primary" disabled={busy}>Save password<ChevronRight size={18} /></button></form></section></main>; }
 function LeaderDashboard({ team, name, motion, message, tapPlant, update, allocate, colleges, history }: { team: Team; name: string; motion: PlantMotion | null; message: PlantMessage | null; tapPlant: () => void; update: () => void; allocate: () => void; colleges: () => void; history: () => void }) {
   const progress = percent(team);
   return <section className="page leader-page">
@@ -249,14 +313,27 @@ function TeamWizard({ team, colleges, back, saved, deleted }: { team?: Team; col
   const available = colleges.filter(c => !c.team_id || c.team_id === savedId || c.team_id === team?.id);
   const next = () => { if (busy) return; setError(""); if (step === 1 && (!name.trim() || !leader.trim() || !Number.isInteger(Number(target)) || Number(target) < 1 || Number(target) > 2147483647)) { setError("Enter a team name, leader name, and positive whole-number target."); return; } if (step === 2 && !team?.leaderId && (!/^[a-z0-9_.-]{3,32}$/.test(username.trim().toLowerCase()) || password.length < 12)) { setError("Use a 3–32 character username and a password of at least 12 characters."); return; } if (step === 2 && team?.leaderId && password && password.length < 12) { setError("Use at least 12 characters for the new password, or leave it blank to keep the current one."); return; } setStep(step + 1); };
   const save = async () => { if (busy) return; setBusy(true); setError(""); let currentId = savedId; let phase = "team"; try {
+    const requestedNames = newCollege.split(",").map(value => value.trim()).filter(Boolean);
+    if (requestedNames.some(value => value.length > 160)) throw new Error("Keep each college name to 160 characters or fewer.");
+    if (new Set(requestedNames.map(value => value.toLowerCase())).size !== requestedNames.length) throw new Error("Each new college name should appear only once.");
+    const matching = colleges.filter(college => requestedNames.some(value => value.toLowerCase() === college.name.toLowerCase()));
+    if (matching.some(college => college.team_id && college.team_id !== currentId)) throw new Error("A college with that name already belongs to another team. Choose an unassigned college.");
+    const effectiveSelected = [...new Set([...selected, ...matching.map(college => college.id)])];
+    const pendingNames = requestedNames.filter(value => !matching.some(college => college.name.toLowerCase() === value.toLowerCase()));
+    setSelected(effectiveSelected); setNewCollege(pendingNames.join(", "));
     let login: LeaderCredentials | undefined;
     const details = { name: name.trim(), leader_name: leader.trim(), member_names: members.split(",").map(s => s.trim()).filter(Boolean), target: Number(target) };
     let id = currentId;
     if (id) { const r = await supabase.from("teams").update(details).eq("id", id).select("id").single(); if (r.error) throw r.error; }
     else { const r = await supabase.from("teams").insert(details).select("id").single(); if (r.error) throw r.error; id = r.data.id as string; currentId = id; setSavedId(id); }
     phase = "colleges";
-    for (const c of colleges) { if (selected.includes(c.id) && c.team_id !== id) { const r = await supabase.from("colleges").update({ team_id: id }).eq("id", c.id); if (r.error) throw r.error; } if (!selected.includes(c.id) && c.team_id === id) { const r = await supabase.from("colleges").update({ team_id: null }).eq("id", c.id); if (r.error) throw r.error; } }
-    for (const collegeName of newCollege.split(",").map(s => s.trim()).filter(Boolean)) { const r = await supabase.from("colleges").insert({ name: collegeName, team_id: id }); if (r.error) throw r.error; } setNewCollege("");
+    for (const c of colleges) { if (effectiveSelected.includes(c.id) && c.team_id !== id) { const r = await supabase.from("colleges").update({ team_id: id }).eq("id", c.id); if (r.error) throw r.error; } if (!effectiveSelected.includes(c.id) && c.team_id === id) { const r = await supabase.from("colleges").update({ team_id: null }).eq("id", c.id); if (r.error) throw r.error; } }
+    for (const [index, collegeName] of pendingNames.entries()) {
+      const r = await supabase.from("colleges").insert({ name: collegeName, team_id: id }).select("id").single();
+      if (r.error) throw r.error;
+      setSelected(current => [...new Set([...current, r.data.id as string])]);
+      setNewCollege(pendingNames.slice(index + 1).join(", "));
+    }
     phase = "leader";
     if (!team?.leaderId) { const r = await supabase.functions.invoke("admin-leaders", { body: { action: "create_leader", team_id: id, username: username.trim().toLowerCase(), display_name: leader.trim(), password } }); if (r.error) throw new Error(await edgeErrorText(r.error)); if (!r.data?.ok) throw new Error(r.data?.error ?? "Could not create the leader account."); login = { teamName: name.trim(), username: username.trim().toLowerCase(), password, kind: "created" }; }
     else if (password) { const r = await supabase.functions.invoke("admin-leaders", { body: { action: "reset_password", team_id: id, password } }); if (r.error) throw new Error(await edgeErrorText(r.error)); if (!r.data?.ok) throw new Error(r.data?.error ?? "Could not reset the leader password."); login = { teamName: name.trim(), username: username.trim().toLowerCase(), password, kind: "reset" }; }
@@ -381,7 +458,7 @@ function CollegesPage({ admin, team, teams, colleges, back, refresh, onNotice }:
     </div>)}</div>
     {!visible.length && <div className="empty-card workflow-empty"><span className="detail-empty-icon"><Building2 size={25} /></span><h2>{colleges.length && admin ? "No matching colleges" : "Room to grow"}</h2><p>{colleges.length && admin ? "Clear your search or choose All colleges." : admin ? "Add your first college above, then assign it to a team." : "Your admin will add your assigned colleges here."}</p>{admin && (query || unassignedOnly) && <button className="secondary-action" onClick={() => { setQuery(""); setUnassignedOnly(false); }}>Show all colleges</button>}</div>}
     <p className="hint">{admin ? "A college can be assigned to one team at a time." : "Need a change? Ask your admin to update assignments."}</p>
-    {editing && <ModalFrame centered busy={busy} close={closeDialog}><section className="confirm-card" role="dialog" aria-modal="true" aria-labelledby="edit-college-title" onClick={e => e.stopPropagation()}><p className="eyebrow">COLLEGE DETAILS</p><h2 id="edit-college-title">Edit college name</h2><label className="field">College name<input value={editName} onChange={e => setEditName(e.target.value)} maxLength={160} autoFocus onKeyDown={e => { if (e.key === "Enter") void rename(); }} /></label>{dialogError && <p className="form-error" role="alert">{dialogError}</p>}<button className="primary" disabled={busy || !editName.trim()} onClick={() => void rename()}>{busy ? "Saving…" : "Save name"}</button><button className="cancel-action" disabled={busy} onClick={closeDialog}>Cancel</button></section></ModalFrame>}
+    {editing && <ModalFrame centered busy={busy} close={closeDialog}><section className="confirm-card" role="dialog" aria-modal="true" aria-labelledby="edit-college-title" onClick={e => e.stopPropagation()}><p className="eyebrow">COLLEGE DETAILS</p><h2 id="edit-college-title">Edit college name</h2><label className="field">College name<input value={editName} onChange={e => setEditName(e.target.value)} maxLength={160} onKeyDown={e => { if (e.key === "Enter") void rename(); }} /></label>{dialogError && <p className="form-error" role="alert">{dialogError}</p>}<button className="primary" disabled={busy || !editName.trim()} onClick={() => void rename()}>{busy ? "Saving…" : "Save name"}</button><button className="cancel-action" disabled={busy} onClick={closeDialog}>Cancel</button></section></ModalFrame>}
     {deleting && <ModalFrame centered busy={busy} close={closeDialog}><section className="confirm-card" role="dialog" aria-modal="true" aria-labelledby="delete-college-title" onClick={e => e.stopPropagation()}><p className="eyebrow">REMOVE COLLEGE</p><h2 id="delete-college-title">Delete {deleting.name}?</h2><p>This permanently removes the college from the list and its team assignment. Colleges with saved entries or totals cannot be deleted, so their history stays intact.</p>{dialogError && <p className="form-error" role="alert">{dialogError}</p>}<button className="danger-action" disabled={busy} onClick={() => void remove()}><Trash2 size={17} />{busy ? "Deleting…" : "Delete college"}</button><button className="cancel-action" disabled={busy} onClick={closeDialog}>Keep college</button></section></ModalFrame>}
   </section>;
 }

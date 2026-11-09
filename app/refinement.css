@@ -1,7 +1,7 @@
 :root{--cream:#f8f3e9;--paper:#fffdf8;--ink:#294338;--muted:#63796b;--green:#426b50;--line:#e5e6da;--ease:cubic-bezier(.22,1,.36,1)}
 html{scroll-padding-bottom:110px}
 body{background:var(--cream);color:var(--ink);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
-button,input,select,textarea{font-family:"DM Sans",Arial,sans-serif}
+button,input,select,textarea{font-family:var(--font-dm-sans),Arial,sans-serif}
 button{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
 button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid #91ad8d;outline-offset:3px}
 button:disabled{opacity:.5}
@@ -74,7 +74,7 @@ input::placeholder,textarea::placeholder{color:#8a9c8e;opacity:1;font-weight:400
 .college-create{gap:10px;margin-bottom:20px}.college-create input{font-size:14px}.add-college{min-height:46px;font-size:12px;padding:11px;border-radius:13px}
 .college-card{padding:16px 13px;border-radius:19px;gap:11px}.college-card h3{font-size:14px;line-height:1.4}.college-card>b{padding:10px;background:#e9f0e3}.college-card select{font-size:12px;min-height:36px;color:#607b64}
 .college-actions{gap:3px;align-self:center}.college-actions button{width:40px;min-height:44px;border-radius:12px}
-.profile{padding-top:30px}.profile-avatar{width:78px;height:78px;font-family:"Fraunces",Georgia,serif;font-size:26px;border:6px solid #fffaf1;box-shadow:0 9px 24px -16px #7d5b3c66;background:#edcfb7;margin-bottom:20px}
+.profile{padding-top:30px}.profile-avatar{width:78px;height:78px;font-family:var(--font-fraunces),Georgia,serif;font-size:26px;border:6px solid #fffaf1;box-shadow:0 9px 24px -16px #7d5b3c66;background:#edcfb7;margin-bottom:20px}
 .profile h1{margin-bottom:8px}.profile>p{font-size:13px;color:var(--muted)}
 .profile-card{border:1px solid var(--line);border-radius:22px;padding:9px 20px;margin:27px 0;background:var(--paper);box-shadow:0 10px 25px -24px #47603e88}
 .profile-card>div{padding:17px 0;gap:15px;border-color:#eaece2}.profile-card span{font-size:12px;color:#7c8e7e}.profile-card strong{font-size:13px;font-weight:600;overflow-wrap:anywhere;text-align:right}

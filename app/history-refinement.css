@@ -4,7 +4,7 @@
 .entries-result-line>button{min-height:44px;white-space:nowrap;padding:8px 0 8px 10px}
 .entry-day-list{display:grid;gap:24px}
 .entry-day-heading{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin:0 2px 12px}
-.entry-day-heading h2{margin:0;color:#49654e;font-family:"DM Sans",Arial,sans-serif;font-size:12px;line-height:1.5;font-weight:700;letter-spacing:.015em}
+.entry-day-heading h2{margin:0;color:#49654e;font-family:var(--font-dm-sans),Arial,sans-serif;font-size:12px;line-height:1.5;font-weight:700;letter-spacing:.015em}
 .entry-day-heading>span{color:#87957e;font-size:10px;line-height:1.5}
 .entry-day-group .entry-card time{white-space:nowrap;font-variant-numeric:tabular-nums;font-size:11px;padding-top:5px;max-width:none}
 .entry-day-group .entry-card{animation:none}

@@ -1,0 +1,52 @@
+/* Keep the quiet botanical palette readable on cream and sage surfaces. */
+:root{--muted:#566b52}
+.eyebrow,.brand small,.hint,.read-only,.list-count,.step-labels,
+.plant-tap-hint,.team-card-progress,.overview-metrics span,
+.wizard-review .eyebrow,.wizard-review>span,.filter-pills button,
+.profile-card span,.profile .profile-footer,.profile-access p,
+.credential-row>span,.credential-warning,.login-card .sub,.login-divider,.role-switch,
+.team-detail-panel-heading>span,.team-detail-leader small,.team-detail-leader p,
+.team-detail-empty,.team-detail-number,.team-detail-updated,.team-detail-updated span,
+.college-breakdown-intro,.college-breakdown-empty span,.college-totals-name>span,.college-totals-grid span,
+.entries-intro,.entries-team-prompt,.entries-result-line,.entry-card time,.entry-delta span,
+.entry-changes,.entry-note>div>span,.entry-day-heading>span,.entries-empty p,
+.entries-load-section>p,.entries-history-end,.entry-help,.entry-note-meta>span,.entry-save-footer>span,
+.update-sheet .sheet-title .eyebrow,.update-sheet .sheet-note,.update-sheet .entry-section-label,
+.update-sheet .update-row small,.entry-field b{color:var(--muted)}
+.bottom-nav button{color:#61745e}
+input::placeholder,textarea::placeholder,.entry-field textarea::placeholder{color:#66765f;opacity:1}
+/* Strong focus is visible without changing the resting card treatment. */
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,
+.entry-filters select:focus-visible,.entry-field select:focus-visible,.entry-field textarea:focus-visible{
+  outline:3px solid #52744f;outline-offset:3px;
+}
+.search:focus-within{outline:3px solid #52744f;outline-offset:3px}
+.search input:focus-visible{outline:none}
+/* All compact controls remain comfortable to use by touch. */
+.search-clear,.update-sheet .sheet-title>button{min-width:44px;min-height:44px}
+.update-sheet .adjust button{width:44px;height:44px}
+.update-sheet .adjust input{height:44px}
+.college-card select{min-height:44px}
+.delete-team{min-height:48px}
+.update-sheet .update-row small,.entry-delta span,.college-totals-grid span,
+.entry-note-meta>span,.entry-save-footer>span{font-size:11px}
+.entry-note-meta .entry-help{font-size:11px}
+/* Long names and large text must wrap rather than conceal a control. */
+.page h1,.profile h1,.team-detail-heading,.team-detail-list li{overflow-wrap:anywhere}
+.profile-card>div{min-width:0}.profile-card strong{min-width:0}
+.sheet,.confirm-card{overscroll-behavior:contain;scroll-padding-block:20px}
+.update-sheet{scroll-padding-bottom:110px}
+.bottom-nav{height:calc(70px + max(8px,env(safe-area-inset-bottom)))}
+@media(max-width:699px){.app-shell{padding-bottom:calc(110px + env(safe-area-inset-bottom))}}
+@media(max-width:380px){
+  .update-sheet .update-row{grid-template-columns:7px minmax(0,1fr);gap:9px 10px}
+  .update-sheet .adjust{grid-column:2;justify-self:stretch;justify-content:space-between}
+  .update-sheet .adjust button{width:44px}.update-sheet .adjust input{flex:1;min-width:43px}
+  .team-detail-heading{align-items:flex-start;flex-wrap:wrap}
+  .entry-card-top{flex-wrap:wrap}.entry-card time{text-align:left}
+}
+@media(hover:none){.college-create input,.search input,.college-card select{font-size:16px}}
+@media(prefers-reduced-motion:reduce){
+  .plant-touch:hover .plant,.team-card.clickable:hover,.link-row:hover,.primary:hover,
+  .round-add:hover,.add-member:hover,.add-college:hover{transform:none!important}
+}

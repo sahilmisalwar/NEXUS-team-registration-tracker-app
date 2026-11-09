@@ -13,7 +13,7 @@
 .team-detail-panel-heading h2,.college-breakdown-heading h2{font-size:22px;letter-spacing:-.025em;}
 .team-detail-panel-heading>span{padding:5px 8px;border-radius:8px;background:#f2f3eb;font-size:10px;color:#6f806d;}
 .team-detail-leader{padding:15px;margin-top:18px;border:1px solid #e1e8da;background:linear-gradient(115deg,#edf2e7,#f5f6ef);}
-.team-detail-avatar{width:44px;height:44px;background:#f4d8c6;border:1px solid #e9cbb7;border-radius:50%;font-family:"Fraunces",Georgia,serif;font-size:18px;font-weight:500;}
+.team-detail-avatar{width:44px;height:44px;background:#f4d8c6;border:1px solid #e9cbb7;border-radius:50%;font-family:var(--font-fraunces),Georgia,serif;font-size:18px;font-weight:500;}
 .team-detail-leader>div:last-child{min-width:0;}
 .team-detail-leader strong{font-size:15px;overflow-wrap:anywhere;}
 .team-detail-leader p{margin-top:3px;font-size:12px;color:#6d7f6c;}
@@ -82,7 +82,7 @@
 .entries-empty{padding:29px 24px 32px;border-radius:24px;}
 .detail-empty-icon{display:grid;place-items:center;margin:0 auto 17px;width:62px;height:62px;background:#edf2e6;border:1px solid #dce6d4;border-radius:22px;color:#78956a;transform:rotate(-5deg);}
 .detail-empty-icon>svg{transform:rotate(5deg);}
-.entries-empty h2{font-family:"Fraunces",Georgia,serif;font-weight:500;font-size:24px;color:#344d38;letter-spacing:-.03em;margin:0 0 9px;}
+.entries-empty h2{font-family:var(--font-fraunces),Georgia,serif;font-weight:500;font-size:24px;color:#344d38;letter-spacing:-.03em;margin:0 0 9px;}
 .entries-empty p{font-size:12px;line-height:1.65;margin:0;color:#74846e;}
 .load-older{display:flex;justify-content:center;align-items:center;gap:8px;min-height:48px;border-color:#d5e0cb;background:#edf2e7;}
 

@@ -24,5 +24,24 @@ Validation completed:
 
 Release through the existing GitHub main-to-Vercel integration. Verify the matching production deployment is READY after pushing.
 
-## Next: Phase 3 (not started)
-Final quality, accessibility, performance, and complete user-journey testing. Wait for the user to request this phase.
+## Phase 3 — implementation and validation complete (2026-11-09)
+- Improved muted-text contrast, visible keyboard focus, 44px counter buttons, small-phone reflow, and safe-area spacing while retaining the botanical palette.
+- Shared modal focus management now excludes disabled/hidden controls, isolates background content, contains focus while saving, and restores the opener.
+- DM Sans and Fraunces are preloaded and self-hosted by Next.js; removed the external Google stylesheet.
+- Fixed entry pagination at identical timestamps, including microsecond precision; live refresh retains older loaded pages.
+- Clear all drafts, one-time credentials, selection, and animation state on account changes; ignore stale asynchronous responses and team callbacks.
+- Use server-generated totals for saved progress and plant feedback; retain drafts on failed requests and reset loading states reliably.
+- Team setup validates new college names and resumes after a partial college save without repeating successful inserts.
+
+Validation:
+- Production build, TypeScript, diff checks and five history regression tests passed.
+- Full application tested with isolated in-memory Supabase responses and network fallback blocked: leader sign-in, college count + note save, failure/retry, note-only save, bloom message at 100%, busy focus containment, account switch with draft, and team setup failure/retry with both colleges retained.
+- 53 history entries (52 sharing a timestamp) loaded without skipping; a simulated live refresh retained all 53.
+- Entry sheet verified at actual 320px and 390px frame widths with no horizontal overflow and 44px plus/minus buttons; desktop layout reviewed.
+- Live Supabase read-only inspection confirmed RLS and no anonymous table reads, protected count writes, and the checked count-entry trigger. No production records or schema changed during this phase.
+- Browser confirmed locally hosted font assets and no console errors in the final team-setup test.
+- Temporary mock/review routes removed; production routes remain `/` and the not-found page.
+
+Verification scope: data-writing user journeys used isolated sample data. Live production data was not changed to test them. This is the final planned polish phase; no additional phase is pending.
+
+Release via GitHub main; verify the matching production deployment is READY.

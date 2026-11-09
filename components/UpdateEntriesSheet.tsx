@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useId, useRef } from "react";
+import { useId } from "react";
+import { ModalFrame } from "./ModalFrame";
 import { Building2, Check, ChevronRight, LoaderCircle, Minus, Plus, X } from "lucide-react";
 
 export type Counts = { interested: number; registered: number; confirmed: number };
@@ -22,15 +23,7 @@ type Props = {
 };
 
 export function UpdateSheet({ team, mode, draft, setDraft, collegeId, setCollegeId, note, setNote, error, close, save, busy }: Props) {
-  const dialog = useRef<HTMLElement>(null);
   const titleId = useId();
-  useEffect(() => {
-    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    dialog.current?.focus();
-    return () => { document.body.style.overflow = previousOverflow; previousFocus?.focus(); };
-  }, []);
   const rows: [keyof Counts, string, string, string][] = [
     ["interested", "Interested", "Considering joining", "peach"],
     ["registered", "Registered", "Signed up, unpaid", "yellow"],
@@ -38,16 +31,8 @@ export function UpdateSheet({ team, mode, draft, setDraft, collegeId, setCollege
   ];
   const change = (key: keyof Counts, value: number) => setDraft({ ...draft, [key]: Math.min(2147483647, Math.max(0, Math.floor(value || 0))) });
 
-  return <div className="sheet-backdrop" onClick={() => { if (!busy) close(); }}>
-    <section ref={dialog} tabIndex={-1} className="sheet update-sheet" role="dialog" aria-modal="true" aria-labelledby={titleId} aria-busy={busy} onClick={event => event.stopPropagation()} onKeyDown={event => {
-      if (event.key === "Escape" && !busy) { event.preventDefault(); close(); }
-      if (event.key !== "Tab") return;
-      const controls = dialog.current?.querySelectorAll<HTMLElement>("button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled)");
-      if (!controls?.length) return;
-      const first = controls[0], last = controls[controls.length - 1];
-      if (event.shiftKey && (document.activeElement === first || document.activeElement === dialog.current)) { event.preventDefault(); last.focus(); }
-      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
-    }}>
+  return <ModalFrame close={close} busy={busy}>
+    <section tabIndex={-1} className="sheet update-sheet" role="dialog" aria-modal="true" aria-labelledby={titleId} aria-busy={busy}>
       <i className="sheet-handle" />
       <div className="sheet-title"><div><p className="eyebrow">{team.name.toUpperCase()}</p><h2 id={titleId}>{mode === "allocation" ? "Assign earlier totals" : "A little more progress."}</h2></div><button type="button" aria-label="Close update entries" disabled={busy} onClick={close}><X size={20} /></button></div>
       <p className="sheet-note">{mode === "allocation" ? "If you know which college earned earlier registrations, assign those existing totals here. The team total will stay the same." : "Choose a college, then update its counts. The team totals adjust automatically when you save."}</p>
@@ -63,5 +48,5 @@ export function UpdateSheet({ team, mode, draft, setDraft, collegeId, setCollege
         <div className="entry-save-footer"><button className="primary" type="submit" disabled={busy || !collegeId || !team.colleges.length}>{busy ? <LoaderCircle size={18} className="detail-spinner" /> : <Check size={18} />}{busy ? "Saving your progress…" : mode === "allocation" ? "Assign totals" : "Save entry"}{!busy && <ChevronRight size={18} />}</button><span>Every small step counts.</span></div>
       </form>
     </section>
-  </div>;
+  </ModalFrame>;
 }
