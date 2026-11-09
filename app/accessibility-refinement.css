@@ -22,6 +22,8 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 }
 .search:focus-within{outline:3px solid #52744f;outline-offset:3px}
 .search input:focus-visible{outline:none}
+/* Navigation announces the heading without giving static text a control outline. */
+.page h1[tabindex="-1"]:focus,.profile h1[tabindex="-1"]:focus{outline:none}
 /* All compact controls remain comfortable to use by touch. */
 .search-clear,.update-sheet .sheet-title>button{min-width:44px;min-height:44px}
 .update-sheet .adjust button{width:44px;height:44px}

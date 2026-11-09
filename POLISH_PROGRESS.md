@@ -40,6 +40,7 @@ Validation:
 - Entry sheet verified at actual 320px and 390px frame widths with no horizontal overflow and 44px plus/minus buttons; desktop layout reviewed.
 - Live Supabase read-only inspection confirmed RLS and no anonymous table reads, protected count writes, and the checked count-entry trigger. No production records or schema changed during this phase.
 - Browser confirmed locally hosted font assets and no console errors in the final team-setup test.
+- Production dashboard confirmed correct fonts, no horizontal overflow, and no console errors; suppressed the browser outline on programmatically focused page headings while retaining control focus indicators.
 - Temporary mock/review routes removed; production routes remain `/` and the not-found page.
 
 Verification scope: data-writing user journeys used isolated sample data. Live production data was not changed to test them. This is the final planned polish phase; no additional phase is pending.
