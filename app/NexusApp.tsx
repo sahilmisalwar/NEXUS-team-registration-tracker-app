@@ -11,6 +11,7 @@ import { EntryCard, EntriesPage, type CountEntry } from "@/components/EntryHisto
 import { TeamDetail } from "@/components/TeamDetail";
 import { UpdateSheet, type Counts } from "@/components/UpdateEntriesSheet";
 import { mergeEntryHistory, olderEntriesFilter } from "@/lib/entry-history";
+import { revealSavedPlant } from "@/lib/reveal-saved-plant";
 import { authLinkType, supabase } from "@/lib/supabase";
 
 type Profile = { user_id: string; username: string; display_name: string; role: "admin" | "leader" };
@@ -61,6 +62,7 @@ export default function NexusApp() {
   const [sheet, setSheet] = useState(false), [entryMode, setEntryMode] = useState<EntryMode>("update"), [draft, setDraft] = useState<Counts>(empty()), [baseCounts, setBaseCounts] = useState<Counts>(empty()), [entryCollegeId, setEntryCollegeId] = useState(""), [entryNote, setEntryNote] = useState(""), [entryError, setEntryError] = useState(""), [busy, setBusy] = useState(false), [error, setError] = useState(""), [notice, setNotice] = useState("");
   const [plantMotion, setPlantMotion] = useState<PlantMotion | null>(null);
   const [plantMessage, setPlantMessage] = useState<PlantMessage | null>(null);
+  const [savedPlantReward, setSavedPlantReward] = useState<{ motion: PlantMotion; message: PlantMessage } | null>(null);
   const [credentials, setCredentials] = useState<LeaderCredentials | null>(null);
   const [needsPassword, setNeedsPassword] = useState(() => authLinkType === "invite" || authLinkType === "recovery");
   const activeUser = useRef<string | null>(null);
@@ -77,6 +79,17 @@ export default function NexusApp() {
     const heading = pageRoot.current?.querySelector<HTMLElement>(".page h1");
     if (heading) { heading.tabIndex = -1; heading.focus({ preventScroll: true }); }
   }, [screen]);
+  useEffect(() => {
+    if (!savedPlantReward) return;
+    if (sheet || screen !== "leader") { setSavedPlantReward(null); return; }
+    const plant = pageRoot.current?.querySelector<HTMLButtonElement>(".leader-page .plant-touch");
+    if (!plant) return;
+    return revealSavedPlant(plant, () => {
+      setPlantMotion(savedPlantReward.motion);
+      setPlantMessage(savedPlantReward.message);
+      setSavedPlantReward(null);
+    });
+  }, [savedPlantReward, sheet, screen]);
 
   const reload = useCallback(async (userId: string, quiet = false) => {
     const request = ++reloadVersion.current;
@@ -125,7 +138,7 @@ export default function NexusApp() {
       if (userId !== activeUser.current) {
         activeUser.current = userId; authVersion.current += 1; reloadVersion.current += 1; historyExpanded.current = false; savingEntry.current = false;
         setProfile(null); setTeams([]); setColleges([]); setEntries([]); setHasOlderEntries(false); setLoadingOlderEntries(false);
-        setCredentials(null); setPlantMotion(null); setPlantMessage(null); setSheet(false); setDraft(empty()); setBaseCounts(empty());
+        setCredentials(null); setPlantMotion(null); setPlantMessage(null); setSavedPlantReward(null); setSheet(false); setDraft(empty()); setBaseCounts(empty());
         setEntryCollegeId(""); setEntryNote(""); setEntryError(""); setEntryMode("update"); setSelected(null); setEditing(null);
         setBusy(false); setError(""); setNotice(""); setScreen("login");
         if (noticeTimer.current) clearTimeout(noticeTimer.current);
@@ -194,8 +207,11 @@ export default function NexusApp() {
     const previousPercent = team.target ? r.data.previous_confirmed_paid / team.target * 100 : 0;
     setTeams(current => current.map(item => item.id === team.id ? { ...item, counts: nextTeamCounts, collegeTotals: item.collegeTotals.map(college => college.id === entryCollegeId ? { ...college, counts: nextCounts } : college), unallocated: entryMode === "allocation" ? { interested: item.unallocated.interested - delta.interested, registered: item.unallocated.registered - delta.registered, confirmed: item.unallocated.confirmed - delta.confirmed } : item.unallocated, updated: r.data.created_at } : item));
     setSheet(false); setScreen("leader");
-    setPlantMotion(current => ({ kind: entryMode === "update" && delta.confirmed > 0 ? "grow" : "nudge", fromPercent: previousPercent, id: (current?.id ?? 0) + 1 }));
-    setPlantMessage(current => ({ text: entryMode === "allocation" ? "Earlier totals assigned to your college. Nicely done!" : savedEntryMessage(nextTeamCounts.confirmed, team.target, delta.confirmed > 0), id: (current?.id ?? 0) + 1 }));
+    setPlantMotion(null); setPlantMessage(null);
+    setSavedPlantReward({
+      motion: { kind: entryMode === "update" && delta.confirmed > 0 ? "grow" : "nudge", fromPercent: previousPercent, id: Date.now() },
+      message: { text: entryMode === "allocation" ? "Earlier totals assigned to your college. Nicely done!" : savedEntryMessage(nextTeamCounts.confirmed, team.target, delta.confirmed > 0), id: Date.now() },
+    });
     flash(entryMode === "allocation" ? "Earlier totals assigned" : "Entry saved"); if (session) void reload(session.user.id, true);
     } catch (e) { if (activeUser.current === userId && authVersion.current === authRequest) setEntryError(errText(e)); }
     finally { if (activeUser.current === userId && authVersion.current === authRequest) { savingEntry.current = false; setBusy(false); } }
@@ -231,7 +247,7 @@ export default function NexusApp() {
   return <main ref={pageRoot} className="app-shell"><header className="topbar"><button className="brand" onClick={home}><b className="brand-emblem"><Image src="/nexus-team-emblem.png" alt="" width={31} height={31} /></b><span>NEXUS<small>PROGRESS TRACKER</small></span></button><button className="avatar" aria-label="Open your profile" onClick={() => setScreen("profile")}>{profile.display_name.slice(0, 2).toUpperCase()}</button></header>
     {notice && <div className="toast" role="status">✓ {notice}</div>}{error && <div className="app-error" role="alert">{error}<button onClick={() => setError("")}>Dismiss</button></div>}{busy && <p className="loading-note" role="status">Updating your plant…</p>}
     {screen === "admin" && <AdminDashboard teams={teams} entries={entries} manage={() => setScreen("teams")} view={id => { setSelected(id); setScreen("team-detail"); }} history={() => setScreen("entries")} create={() => { setEditing(null); setScreen("team-form"); }} />}
-    {screen === "leader" && (team ? <LeaderDashboard team={team} name={profile.display_name} motion={plantMotion} message={plantMessage} tapPlant={tapPlant} update={() => openUpdate()} allocate={() => openUpdate("allocation")} colleges={() => setScreen("colleges")} history={() => setScreen("entries")} /> : <section className="page empty-state"><Plant percent={0} /><h1>Your team is being prepared.</h1><p>Ask your administrator to assign your account to a team.</p></section>)}
+    {screen === "leader" && (team ? <LeaderDashboard team={team} name={profile.display_name} motion={plantMotion} message={plantMessage} waitingPercent={savedPlantReward?.motion.fromPercent} tapPlant={tapPlant} update={() => openUpdate()} allocate={() => openUpdate("allocation")} colleges={() => setScreen("colleges")} history={() => setScreen("entries")} /> : <section className="page empty-state"><Plant percent={0} /><h1>Your team is being prepared.</h1><p>Ask your administrator to assign your account to a team.</p></section>)}
     {screen === "teams" && <TeamsPage teams={teams} create={() => { setEditing(null); setScreen("team-form"); }} view={id => { setSelected(id); setScreen("team-detail"); }} />}
     {screen === "team-detail" && (selectedTeam ? <TeamDetail team={selectedTeam} back={() => setScreen("teams")} edit={() => { setEditing(selectedTeam.id); setScreen("team-form"); }} /> : <section className="page empty-state"><h1>Team unavailable</h1><p>This team may have been removed.</p><button className="primary" onClick={() => setScreen("teams")}>Back to teams</button></section>)}
     {screen === "team-form" && <TeamWizard key={editing ?? "new"} team={teams.find(t => t.id === editing)} colleges={colleges} back={() => setScreen(editing ? "team-detail" : "teams")} saved={async (id, login) => { if (!isCurrentSession()) return; if (session) await reload(session.user.id); if (!isCurrentSession()) return; setSelected(id); setScreen(editing ? "team-detail" : "teams"); if (login) setCredentials(login); else flash(editing ? "Team updated" : "Team created"); }} deleted={async () => { if (!isCurrentSession()) return; if (session) await reload(session.user.id); if (!isCurrentSession()) return; setSelected(null); setEditing(null); setScreen("teams"); flash("Team deleted"); }} />}
@@ -269,14 +285,14 @@ function Login({ error, onError }: { error: string; onError: (s: string) => void
   return <main className="login-page"><i className="sprig a">❋</i><i className="sprig b">❋</i><section className="login-card"><Image className="login-emblem login-emblem-left" src="/nexus-team-emblem.png" alt="" width={38} height={38} /><Image className="login-emblem login-emblem-nit" src="/nit-shield-crest.png" alt="Nagpur Institute of Technology crest" width={48} height={32} /><div className="login-plant"><Plant percent={65} /></div><p className="eyebrow">WELCOME TO</p><h1>NEXUS</h1><p className="sub">Progress grows one step at a time.</p><div className="login-divider"><span>YOUR NEXT MILESTONE STARTS HERE</span></div><form onSubmit={signIn}><label>Email or leader username<input autoComplete="username" value={identifier} onChange={e => setIdentifier(e.target.value)} placeholder="you@example.com or username" autoCapitalize="none" spellCheck={false} required /></label><PasswordField label="Password" value={password} onChange={setPassword} placeholder="Your password" autoComplete="current-password" required />{error && <p className="form-error" role="alert">{error}</p>}{info && <p className="form-info" role="status">{info}</p>}<button className="primary" disabled={sending} type="submit">{sending ? "Please wait…" : "Sign in"}<ChevronRight size={18} /></button></form><button className="role-switch" type="button" onClick={() => void sendSetup()} disabled={sending}>Admin: set or reset your password</button></section></main>;
 }
 function PasswordSetup({ done }: { done: () => void }) { const [password, setPassword] = useState(""), [error, setError] = useState(""), [busy, setBusy] = useState(false); const save = async (event: React.FormEvent) => { event.preventDefault(); if (password.length < 12) { setError("Use at least 12 characters."); return; } if (busy) return; setBusy(true); setError(""); try { const r = await supabase.auth.updateUser({ password }); if (r.error) setError(r.error.message); else done(); } catch { setError("Could not connect. Check your connection and try again."); } finally { setBusy(false); } }; return <main className="login-page"><section className="login-card"><Image className="login-emblem" src="/nexus-team-emblem.png" alt="" width={38} height={38} /><div className="login-plant"><Plant percent={100} /></div><h1>Welcome to NEXUS</h1><p className="sub">Choose your password to finish setting up your account.</p><form onSubmit={save}><PasswordField label="New password" value={password} onChange={setPassword} autoComplete="new-password" minLength={12} required />{error && <p className="form-error" role="alert">{error}</p>}<button className="primary" disabled={busy}>Save password<ChevronRight size={18} /></button></form></section></main>; }
-function LeaderDashboard({ team, name, motion, message, tapPlant, update, allocate, colleges, history }: { team: Team; name: string; motion: PlantMotion | null; message: PlantMessage | null; tapPlant: () => void; update: () => void; allocate: () => void; colleges: () => void; history: () => void }) {
+function LeaderDashboard({ team, name, motion, message, waitingPercent, tapPlant, update, allocate, colleges, history }: { team: Team; name: string; motion: PlantMotion | null; message: PlantMessage | null; waitingPercent?: number; tapPlant: () => void; update: () => void; allocate: () => void; colleges: () => void; history: () => void }) {
   const progress = percent(team);
   return <section className="page leader-page">
     <p className="greeting">Hello, {name.split(" ")[0]} <span>☀</span></p>
     <h1>Let’s help your plant grow.</h1><p className="page-intro">Small steps. Shared progress. A little closer every day.</p>
     <div className="garden-card">
       <div className="garden-heading"><div><p className="eyebrow">{team.name.toUpperCase()}</p><h2>{team.counts.confirmed} <small>of {team.target} confirmed</small></h2></div><b>Stage {stage(progress)}/5</b></div>
-      <button className="plant-touch" type="button" aria-label={`Tap the plant, stage ${stage(progress)} of 5`} onClick={tapPlant}><Plant percent={progress} motion={motion?.kind} fromPercent={motion?.fromPercent} motionKey={motion?.id} /></button>
+      <button className="plant-touch" type="button" aria-label={`Tap the plant, stage ${stage(progress)} of 5`} onClick={tapPlant}><Plant percent={waitingPercent ?? progress} motion={motion?.kind} fromPercent={motion?.fromPercent} motionKey={motion?.id} /></button>
       {message && <p className="plant-message" role="status" key={message.id}>{message.text}</p>}
       <div className="percent-row"><strong>{pct(progress)}</strong><span>toward your target</span></div>
       <Progress value={progress} />

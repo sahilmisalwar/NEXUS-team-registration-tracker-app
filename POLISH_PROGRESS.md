@@ -46,3 +46,8 @@ Validation:
 Verification scope: data-writing user journeys used isolated sample data. Live production data was not changed to test them. This is the final planned polish phase; no additional phase is pending.
 
 Release via GitHub main; verify the matching production deployment is READY.
+
+## Save reward visibility (2026-11-09)
+- Successful entry saves now close the sheet, focus and center the plant, then start growth and encouragement after the visible plant has painted. The prior growth stage is held during this transition.
+- This runs for each successful save, including saves from a dashboard already scrolled down. Failed saves retain their draft and sheet. Navigation and account changes cancel a queued reward.
+- Production build and TypeScript passed; all eight tests passed, including three checks for reveal-before-animation ordering, cancellation, and unmounted targets. No real entries were created for verification.
